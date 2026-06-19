@@ -1,0 +1,88 @@
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#f5f6fa;--card:#fff;--primary:#2563eb;--primary-light:#dbeafe;--text:#1e293b;--text2:#64748b;--border:#e2e8f0;--success:#22c55e;--danger:#ef4444;--radius:10px;--shadow:0 1px 4px rgba(0,0,0,.08)}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100dvh;overflow-x:hidden;-webkit-tap-highlight-color:transparent}
+
+/* Header */
+#header{background:var(--card);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
+.header-inner{max-width:800px;margin:0 auto;padding:10px 14px;display:flex;align-items:center;justify-content:space-between}
+.logo{font-size:16px;font-weight:700}
+.header-right{display:flex;align-items:center;gap:8px}
+.version-switch{display:flex;border:1px solid var(--border);border-radius:6px;overflow:hidden}
+.ver-btn{padding:4px 12px;font-size:12px;border:none;cursor:pointer;background:var(--card);color:var(--text2);transition:.15s}
+.ver-btn.active{background:var(--primary);color:#fff;font-weight:600}
+
+/* Search */
+#searchBar{max-width:800px;margin:8px auto;padding:0 14px;display:flex;gap:6px}
+#searchInput{flex:1;padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:14px;outline:none;background:var(--card);transition:.15s}
+#searchInput:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-light)}
+#searchClear{padding:6px 10px;background:0 0;border:none;font-size:16px;cursor:pointer}
+
+/* Chapter Nav */
+#chapterNav{max-width:800px;margin:8px auto;padding:0 14px}
+#chapterList{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+#chapterList::-webkit-scrollbar{display:none}
+.chip{padding:7px 14px;border-radius:20px;border:1px solid var(--border);background:var(--card);cursor:pointer;font-size:13px;white-space:nowrap;transition:.15s;flex-shrink:0}
+.chip:hover{border-color:var(--primary);color:var(--primary)}
+.chip.active{background:var(--primary);color:#fff;border-color:var(--primary);font-weight:600}
+.chip .count{font-size:11px;opacity:.7;margin-left:4px}
+#typeFilters{display:flex;gap:5px;overflow-x:auto;margin:8px 0 4px;padding-bottom:4px}
+.type-btn{padding:5px 12px;border-radius:6px;border:1px solid var(--border);background:var(--card);cursor:pointer;font-size:12px;white-space:nowrap;transition:.15s;flex-shrink:0}
+.type-btn.active{background:var(--primary-light);color:var(--primary);border-color:var(--primary);font-weight:600}
+
+/* Main */
+#mainContent{max-width:800px;margin:0 auto;padding:0 14px 80px}
+#welcome{text-align:center;padding:60px 20px}
+.welcome-icon{font-size:48px;margin-bottom:12px}
+#welcome h2{font-size:18px;margin-bottom:8px}
+#welcome p{font-size:14px;color:var(--text2)}
+
+/* Card */
+
+/* Question List */
+#questionList{padding:8px 0}
+.q-card{background:var(--card);border-radius:var(--radius);padding:16px;margin-bottom:10px;box-shadow:var(--shadow)}
+.q-card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.q-type-badge{font-size:11px;color:#fff;background:var(--primary);padding:2px 8px;border-radius:4px;font-weight:600}
+.q-chapter-label{font-size:11px;color:var(--text2)}
+.q-text{font-size:14px;line-height:1.7;margin-bottom:12px}
+.q-options{margin-bottom:8px}
+.opt-row{padding:8px 10px;margin-bottom:4px;border:1px solid var(--border);border-radius:6px;font-size:13px;line-height:1.5;cursor:pointer;transition:.15s}
+.opt-row:active{background:var(--border)}
+.opt.correct{background:#dcfce7;border-color:var(--success)}
+.opt.wrong{background:#fef2f2;border-color:var(--danger)}
+.opt.revealed{background:#dcfce7;border-color:var(--success)}
+.q-answer{background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px;margin-top:10px;font-size:13px;line-height:1.7;display:none}
+.q-answer.visible{display:block}
+.q-answer .label{font-weight:600;color:#b45309;margin-bottom:4px}
+.q-show-answer-btn{padding:6px 14px;border-radius:6px;border:1px solid var(--border);background:0 0;cursor:pointer;font-size:12px;color:var(--primary);transition:.15s}
+.q-show-answer-btn:active{background:var(--primary-light)}
+.q-nav-info{font-size:12px;color:var(--text2);margin-top:8px;text-align:center}
+
+/* Top actions */
+#topActions{display:flex;gap:6px;margin:8px 0}
+.action-btn{padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:var(--card);cursor:pointer;font-size:12px;transition:.15s}
+.action-btn:active{background:var(--border)}
+
+/* Search Results */
+#searchResults{padding:8px 0}
+.sr-item{padding:12px 14px;background:var(--card);border-radius:8px;margin-bottom:6px;cursor:pointer;box-shadow:var(--shadow);font-size:13px;line-height:1.6;transition:.15s}
+.sr-item:active{background:var(--primary-light)}
+.sr-chapter{font-size:11px;color:var(--text2);margin-bottom:4px}
+.sr-match{color:var(--primary);font-weight:600}
+
+/* Modal */
+.modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.4);z-index:200;display:flex;align-items:center;justify-content:center}
+.modal-content{background:var(--card);border-radius:12px;padding:24px;max-width:400px;width:90%;max-height:80vh;overflow-y:auto;position:relative}
+.modal-close{position:absolute;top:12px;right:14px;font-size:20px;cursor:pointer;background:0 0;border:none;color:var(--text2)}
+.modal h2{font-size:16px;margin-bottom:14px}
+.stat-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
+.stat-row:last-child{border-bottom:none}
+.stat-label{color:var(--text2)}
+.stat-value{font-weight:600}
+
+/* Wrong book */
+#wrongBookHeader{margin:12px 0 8px;display:flex;gap:8px;align-items:center}
+#clearWrongBtn{padding:5px 10px;border-radius:6px;border:1px solid var(--danger);background:0 0;color:var(--danger);cursor:pointer;font-size:12px}
+
+@media(max-width:480px){.logo{font-size:14px}.ver-btn{padding:3px 8px;font-size:11px}#cardBody{padding:16px 12px}.q-text{font-size:14px}.opt{font-size:13px;padding:8px 10px}.primary-btn{font-size:13px}}
+@media(min-width:640px){.header-inner{padding:12px 20px}#searchBar{padding:0 20px}#chapterNav{padding:0 20px}#mainContent{padding:0 20px 80px}}
