@@ -2,6 +2,10 @@
 
 公用工程题库的移动端刷题应用，纯静态单页面应用，可部署到 GitHub Pages。
 
+## 在线浏览
+
+<https://consoleloghello.github.io/yskdocu/>
+
 ## 使用
 
 直接打开 `index.html` 即可使用（需本地 HTTP 服务器，如 `python -m http.server`）。

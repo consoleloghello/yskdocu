@@ -233,7 +233,7 @@ function updateStats(){
 }
 
 // Search
-$('searchInput').addEventListener('input', ()=>{
+var __el__ = $('searchInput'); if (__el__) __el__.addEventListener('input', ()=>{
   const v = $('searchInput').value.trim();
   $('searchClear').style.display = v ? 'inline' : 'none';
   state.searchQuery = v;
@@ -247,7 +247,7 @@ $('searchInput').addEventListener('input', ()=>{
   state.type = 'all';
   saveState(); render();
 });
-$('searchClear').addEventListener('click', ()=>{
+var __el__ = $('searchClear'); if (__el__) __el__.addEventListener('click', ()=>{
   $('searchInput').value = '';
   $('searchClear').style.display = 'none';
   state.searchQuery = '';
@@ -257,7 +257,7 @@ $('searchClear').addEventListener('click', ()=>{
 });
 
 // Stats modal
-$('statsBtn').addEventListener('click', ()=>{
+var __el__ = $('statsBtn'); if (__el__) __el__.addEventListener('click', ()=>{
   const total = flatQs.length;
   const wrong = Object.keys(state.wrongBook).length;
   $('statsBody').innerHTML = `
@@ -269,17 +269,17 @@ $('statsBtn').addEventListener('click', ()=>{
   `;
   $('statsModal').style.display = 'flex';
 });
-$('statsClose').addEventListener('click', ()=>{ $('statsModal').style.display='none'; });
-$('statsModal').addEventListener('click', e=>{ if(e.target===e.currentTarget) e.currentTarget.style.display='none'; });
+var __el__ = $('statsClose'); if (__el__) __el__.addEventListener('click', ()=>{ $('statsModal').style.display='none'; });
+var __el__ = $('statsModal'); if (__el__) __el__.addEventListener('click', e=>{ if(e.target===e.currentTarget) e.currentTarget.style.display='none'; });
 
 // Top action buttons
-$('wrongBookBtn').addEventListener('click', ()=>{
+var __el__ = $('wrongBookBtn'); if (__el__) __el__.addEventListener('click', ()=>{
   state.mode = 'wrong';
   state.chapter = 'all'; state.type = 'all'; state.searchQuery = '';
   $('searchInput').value = '';
   saveState(); render();
 });
-$('shuffleBtn').addEventListener('click', ()=>{
+var __el__ = $('shuffleBtn'); if (__el__) __el__.addEventListener('click', ()=>{
   if(!_currentQs.length) return;
   const qs = [..._currentQs];
   for(let i=qs.length-1; i>0; i--){
@@ -288,30 +288,105 @@ $('shuffleBtn').addEventListener('click', ()=>{
   }
   renderCards(qs);
 });
-$('revealAllBtn').addEventListener('click', ()=>{
+var __el__ = $('revealAllBtn'); if (__el__) __el__.addEventListener('click', ()=>{
   _currentQs.forEach(q => revealed.add(q._id));
   saveState(); renderCards(_currentQs);
 });
-$('hideAllBtn').addEventListener('click', ()=>{
+var __el__ = $('hideAllBtn'); if (__el__) __el__.addEventListener('click', ()=>{
   _currentQs.forEach(q => revealed.delete(q._id));
   saveState(); renderCards(_currentQs);
 });
 
-// Version switch
-$('verWaic').addEventListener('click', ()=>{
-  if(state.version==='外操版') return;
-  $('verWaic').classList.add('active'); $('verNei').classList.remove('active');
-  state.wrongBook={}; state.chapter='all'; state.type='all'; state.searchQuery=''; state.mode='browse';
-  $('searchInput').value=''; loadData('外操版');
+
+
+// Version switch (header buttons)
+var __el__waic = document.getElementById('verWaic');
+var __el__nei = document.getElementById('verNei');
+if (__el__waic) __el__waic.addEventListener('click', function() {
+  if (state.version === '外操版') return;
+  __el__waic.classList.add('active');
+  __el__nei.classList.remove('active');
+  state.wrongBook = {};
+  state.chapter = 'all';
+  state.type = 'all';
+  state.searchQuery = '';
+  state.mode = 'browse';
+  document.getElementById('searchInput').value = '';
+  loadData('外操版');
 });
-$('verNei').addEventListener('click', ()=>{
-  if(state.version==='内操版') return;
-  $('verNei').classList.add('active'); $('verWaic').classList.remove('active');
-  state.wrongBook={}; state.chapter='all'; state.type='all'; state.searchQuery=''; state.mode='browse';
-  $('searchInput').value=''; loadData('内操版');
+if (__el__nei) __el__nei.addEventListener('click', function() {
+  if (state.version === '内操版') return;
+  __el__nei.classList.add('active');
+  __el__waic.classList.remove('active');
+  state.wrongBook = {};
+  state.chapter = 'all';
+  state.type = 'all';
+  state.searchQuery = '';
+  state.mode = 'browse';
+  document.getElementById('searchInput').value = '';
+  loadData('内操版');
 });
+// ===== Entry Overlay =====
+(function initOverlay() {
+  const overlay = document.getElementById('entryOverlay');
+  if (!overlay) return;
+
+  const cards = overlay.querySelectorAll('.overlay-card');
+  const verWaic = document.getElementById('verWaic');
+  const verNei = document.getElementById('verNei');
+
+  function handleVersionSelect(ver) {
+    if (ver === '外操版') {
+      verWaic.classList.add('active');
+      verNei.classList.remove('active');
+    } else {
+      verNei.classList.add('active');
+      verWaic.classList.remove('active');
+    }
+    state.wrongBook = {};
+    state.chapter = 'all';
+    state.type = 'all';
+    state.searchQuery = '';
+    state.mode = 'browse';
+    document.getElementById('searchInput').value = '';
+    saveState();
+
+    overlay.classList.add('exit');
+    overlay.querySelectorAll('.overlay-card').forEach(c => c.style.pointerEvents = 'none');
+
+    setTimeout(() => {
+      loadData(ver);
+    }, 100);
+
+    setTimeout(() => {
+      overlay.classList.add('hide');
+      overlay.classList.remove('exit');
+    }, 650);
+  }
+
+  cards.forEach(card => {
+    card.addEventListener('click', function(e) {
+      if (this.classList.contains('clicked')) return;
+      this.classList.add('clicked');
+
+      const rect = this.getBoundingClientRect();
+      const ripple = document.createElement('span');
+      ripple.className = 'ripple';
+      const size = Math.max(rect.width, rect.height);
+      ripple.style.width = ripple.style.height = size + 'px';
+      ripple.style.left = (e.clientX - rect.left - size / 2) + 'px';
+      ripple.style.top = (e.clientY - rect.top - size / 2) + 'px';
+      this.style.position = 'relative';
+      this.style.overflow = 'hidden';
+      this.appendChild(ripple);
+
+      handleVersionSelect(this.dataset.ver);
+    });
+  });
+})();
 
 // Init
 loadState();
-loadData(state.version);
 })();
+
+

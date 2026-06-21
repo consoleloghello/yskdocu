@@ -8,6 +8,31 @@
 </head>
 <body>
 <div id="app">
+  <!-- Entry Overlay -->
+  <div id="entryOverlay">
+    <div class="overlay-bg"></div>
+    <div class="overlay-content">
+      <div class="overlay-title">
+        <div class="overlay-icon">📘</div>
+        <h1>公用工程题库</h1>
+        <p>请选择版本进入</p>
+      </div>
+      <div class="overlay-cards">
+        <div class="overlay-card" data-ver="外操版">
+          <div class="card-icon">🔧</div>
+          <h2>外操版</h2>
+          <p>适用于现场操作人员</p>
+          <span class="card-btn">进入</span>
+        </div>
+        <div class="overlay-card" data-ver="内操版">
+          <div class="card-icon">🖥️</div>
+          <h2>内操版</h2>
+          <p>适用于中控操作人员</p>
+          <span class="card-btn">进入</span>
+        </div>
+      </div>
+    </div>
+  </div>
   <!-- Header -->
   <header id="header">
     <div class="header-inner">
@@ -68,6 +93,6 @@
   </div>
 </div>
 
-<script src="js/app.js"></script>
+<script src="js/app.js?v=2"></script>
 </body>
 </html>
