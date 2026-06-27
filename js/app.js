@@ -40,6 +40,9 @@ async function loadData(ver){
     if(!r.ok) throw new Error('HTTP '+r.status);
     data = await r.json();
     buildFlat();
+    // Default: reveal all answers on page load / version switch
+    revealed.clear();
+    flatQs.forEach(q => revealed.add(q._id));
     state.version = ver;
     // Update header toggle to reflect the loaded version (only after successful load)
     if(ver === '外操版'){
@@ -313,15 +316,7 @@ $('wrongBookBtn').addEventListener('click', ()=>{
   $('searchInput').value = '';
   saveState(); render();
 });
-$('shuffleBtn').addEventListener('click', ()=>{
-  if(!_currentQs.length) return;
-  const qs = [..._currentQs];
-  for(let i=qs.length-1; i>0; i--){
-    const j = Math.floor(Math.random()*(i+1));
-    [qs[i], qs[j]] = [qs[j], qs[i]];
-  }
-  renderCards(qs);
-});
+
 $('revealAllBtn').addEventListener('click', ()=>{
   _currentQs.forEach(q => revealed.add(q._id));
   saveState(); renderCards(_currentQs);
