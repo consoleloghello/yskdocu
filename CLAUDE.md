@@ -40,10 +40,12 @@ There is no build step, no test suite, and no linter configured.
 - `type`: `"all"` | question type string
 - `searchQuery`: current search input text
 - `mode`: `"browse"` | `"wrong"` | `"search"`
-- `wrongBook`: `{ [q._id]: true }` — automatically populated when user clicks wrong answer
+- `wrongBook`: `{ [q._id]: true }` — auto-populated on wrong answers; persisted per-version under `ysk_wrong_${version}`
 - `stats`: reserved object (currently unused in rendering)
 
 **Revealed state** (`revealed` Set, synced to `ysk_revealed`): tracks which question IDs have their answer currently shown.
+
+**localStorage keys:** `ysk_state`, `ysk_revealed`, `ysk_wrong_外操版`, `ysk_wrong_内操版`
 
 **Key functions in `app.js`:**
 - `loadData(ver)` — fetch JSON, call `buildFlat()`, render
@@ -51,7 +53,7 @@ There is no build step, no test suite, and no linter configured.
 - `renderCards(qs)` — generate card HTML, bind per-card events (answer reveal, option click)
 - `esc()` — XSS-safe text escaping via DOM textContent
 
-**Version switching** clears `wrongBook` and resets all filters (by design — each version gets a clean slate).
+**Version switching** now preserves per-version wrongBook — each version's mistaken questions are stored independently under `ysk_wrong_${version}` and restored when switching back. The entry overlay and header toggle share a `resetViewState()` helper for filter resets.
 
 **Entry overlay** (`#entryOverlay`): full-screen blur backdrop shown on every page load. User must pick 外操版 or 内操版 to enter. No "remember choice" — this is intentional.
 

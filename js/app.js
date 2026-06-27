@@ -15,10 +15,15 @@ function lss(key,v){ try{ localStorage.setItem(key, JSON.stringify(v)) }catch(e)
 function loadState(){
   const s = ls('ysk_state');
   if(s) Object.assign(state, s);
-  // Per-version wrongBook so switching versions doesn't lose mistaken questions
+  // Per-version wrongBook; migrate legacy data from old single-key format
   const wb = ls('ysk_wrong_' + state.version);
-  if(wb) state.wrongBook = wb;
-  else state.wrongBook = {};
+  if(wb) {
+    state.wrongBook = wb;
+  } else if (!state.wrongBook || Object.keys(state.wrongBook).length === 0) {
+    // No per-version key and no legacy data — start fresh
+    state.wrongBook = {};
+  }
+  // else: preserve wrongBook Object.assign copied from legacy ysk_state (migration path)
   const r = ls('ysk_revealed');
   if(r) revealed = new Set(r);
 }
@@ -36,6 +41,14 @@ async function loadData(ver){
     data = await r.json();
     buildFlat();
     state.version = ver;
+    // Update header toggle to reflect the loaded version (only after successful load)
+    if(ver === '外操版'){
+      $('verWaic').classList.add('active');
+      $('verNei').classList.remove('active');
+    } else {
+      $('verNei').classList.add('active');
+      $('verWaic').classList.remove('active');
+    }
     // Load per-version wrongBook
     const wb = ls('ysk_wrong_' + ver);
     if(wb) state.wrongBook = wb;
@@ -190,8 +203,8 @@ function renderCards(qs){
     const isDirect = ['简答题','实操分析题','应急处理题','填空题'].includes(q._type);
     let ansHtml = '';
     if(q._type==='判断题') ansHtml = q.answer==='√' ? '正确 ✓' : '错误 ✗';
-    else if(q._type==='选择题') ansHtml = '正确答案：'+q.answer;
-    else ansHtml = q.answer;
+    else if(q._type==='选择题') ansHtml = q.answer ? '正确答案：'+q.answer : '⚠ 答案未标注';
+    else ansHtml = q.answer || '⚠ 答案未解析';
     const showAns = isDirect || isRevealed;
     h += `<div class="q-answer ${showAns?'visible':''}"><div class="label">📝 参考答案</div>${esc(ansHtml)}</div>`;
     if(!isDirect){
@@ -220,17 +233,20 @@ function renderCards(qs){
       const letter = this.dataset.letter;
       const q = flatQs.find(x => x._id===id);
       if(!q) return;
-      const correct = q.answer && q.answer.toUpperCase()===letter;
+      const hasAnswer = q.answer && q.answer.trim() !== '';
+      const correct = hasAnswer && q.answer.toUpperCase()===letter;
       // Highlight
       card.querySelectorAll('.opt-row').forEach(o => {
         const l = o.dataset.letter;
-        if(l === q.answer) o.classList.add('revealed');
+        if(hasAnswer && l === q.answer) o.classList.add('revealed');
         else if(o===this && !correct) o.classList.add('wrong');
       });
       card.querySelector('.q-answer').classList.add('visible');
       revealed.add(id);
-      if(!correct) state.wrongBook[id] = true;
-      else delete state.wrongBook[id];
+      if(hasAnswer){
+        if(!correct) state.wrongBook[id] = true;
+        else delete state.wrongBook[id];
+      }
       saveState();
       updateTopActions();
     });
@@ -315,21 +331,19 @@ $('hideAllBtn').addEventListener('click', ()=>{
   saveState(); renderCards(_currentQs);
 });
 
-// Version switch (header buttons)
-function switchVersion(ver){
-  if(state.version === ver) return;
-  if(ver === '外操版'){
-    $('verWaic').classList.add('active');
-    $('verNei').classList.remove('active');
-  } else {
-    $('verNei').classList.add('active');
-    $('verWaic').classList.remove('active');
-  }
+// Shared helper: reset all view filters (used by both entry paths)
+function resetViewState(){
   state.chapter = 'all';
   state.type = 'all';
   state.searchQuery = '';
   state.mode = 'browse';
   $('searchInput').value = '';
+}
+
+// Version switch (header buttons)
+function switchVersion(ver){
+  if(state.version === ver) return;
+  resetViewState();
   loadData(ver);
 }
 
@@ -343,15 +357,10 @@ $('verNei').addEventListener('click', function(){ switchVersion('内操版'); })
   const cards = overlay.querySelectorAll('.overlay-card');
 
   function handleVersionSelect(ver) {
-    // Save version to localStorage early so loadState can find wrongBook on reload
+    // Reset filters and set target version; wrongBook is NOT cleared here —
+    // loadData restores the per-version wrongBook from localStorage.
     state.version = ver;
-    state.chapter = 'all';
-    state.type = 'all';
-    state.searchQuery = '';
-    state.mode = 'browse';
-    state.wrongBook = {};
-    $('searchInput').value = '';
-    saveState();
+    resetViewState();
 
     overlay.classList.add('exit');
     overlay.querySelectorAll('.overlay-card').forEach(c => c.style.pointerEvents = 'none');

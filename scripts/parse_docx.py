@@ -39,8 +39,8 @@ def parse_choice_answer(text):
 
 
 def parse_options(inline_text):
-    if re.search(r'A\s*[.、）]\s', inline_text) and re.search(r'B\s*[.、）]\s', inline_text):
-        parts = re.split(r'(?=[A-D]\s*[.、）])', inline_text)
+    if re.search(r'A\s*[.、．）]\s', inline_text) and re.search(r'B\s*[.、．）]\s', inline_text):
+        parts = re.split(r'(?=[A-D]\s*[.、．）])', inline_text)
         return [o.strip() for o in parts if o.strip() and len(o.strip()) > 1]
     return [inline_text]
 
@@ -65,23 +65,43 @@ def is_generic_continuation(text):
 
 
 def looks_like_new_question(text):
+    """Heuristic: does this paragraph start a new question (vs. continuing previous answer)?
+
+    Called only when in_answer mode — the main parse loop handles structural boundaries
+    (chapter titles, question type headers) outside of answer mode.
+    """
     if not text: return False
     if is_generic_continuation(text): return False
-    if is_question_type(text): return True
-    if is_chapter_title(text): return True
-    # Strong signals of a new question — question marks
+    # Strong signals of a new question — question marks (but not if this is answer content)
     if text.endswith('？') or text.endswith('?'):
         return True
-    # Answer preamble lines: "答案：xxx" or "答：xxx"
+    # Answer preamble lines: "答案：xxx" or "答：xxx" — definitely continuation
     if re.match(r'^(答案|答|解析|说明|参考)', text):
         return False
-    # Numbered markers that start a line — typically answer steps (①, 1., (1), etc.)
+    # Numbered markers that start a line — typically answer steps (1., (1), etc.)
     if re.match(r'^\d+[.、)）]', text):
         return False
     # Longer text that doesn't start with answer-like keywords is more likely a new question
     if len(text) >= 20 and not text.startswith(('答案', '答', '解析', '说明')):
         return True
     return False
+
+
+def collect_choice_options(raw, i):
+    """Collect consecutive A/B/C/D-prefixed paragraphs as choice options.
+
+    Returns (options_list, new_index) — new_index is the last consumed paragraph index.
+    """
+    opts = []
+    while i + 1 < len(raw) and re.match(r'[A-D]\s*[.、．）]', raw[i + 1]):
+        nxt = raw[i + 1]
+        # Check if multiple options exist on the same line (e.g. "A. xxx  B. xxx")
+        if re.search(r'[A-D]\s*[.、．）].*[A-D]\s*[.、．）]', nxt):
+            opts.extend(parse_options(nxt))
+        else:
+            opts.append(nxt)
+        i += 1
+    return opts, i
 
 
 def parse_docx(filepath):
@@ -136,29 +156,12 @@ def parse_docx(filepath):
         if cur_type == '选择题':
             if re.search(r'[（(]\s*[A-D]\s*[）)]', text):
                 ans, q = parse_choice_answer(text)
-                opts = []
-                # Collect all consecutive option paragraphs (each may contain 1-4 options)
-                while i + 1 < len(raw) and re.match(r'[A-D]\s*[.、）]', raw[i + 1]):
-                    nxt = raw[i + 1]
-                    # Check if multiple options exist on the same line
-                    if re.search(r'[A-D]\s*[.、）].*[A-D]\s*[.、）]', nxt):
-                        opts.extend(parse_options(nxt))
-                    else:
-                        opts.append(nxt)
-                    i += 1
+                opts, i = collect_choice_options(raw, i)
                 questions.append({'question': q or text, 'options': opts, 'answer': ans})
-            elif i + 1 < len(raw) and re.match(r'[A-D]\s*[.、）]', raw[i + 1]):
+            elif i + 1 < len(raw) and re.match(r'[A-D]\s*[.、．）]', raw[i + 1]):
                 # 选择题 without inline answer marker: capture options from following lines
-                opts = []
-                ans = ''
-                while i + 1 < len(raw) and re.match(r'[A-D]\s*[.、）]', raw[i + 1]):
-                    nxt = raw[i + 1]
-                    if re.search(r'[A-D]\s*[.、）].*[A-D]\s*[.、）]', nxt):
-                        opts.extend(parse_options(nxt))
-                    else:
-                        opts.append(nxt)
-                    i += 1
-                questions.append({'question': text, 'options': opts, 'answer': ans})
+                opts, i = collect_choice_options(raw, i)
+                questions.append({'question': text, 'options': opts, 'answer': ''})
 
         elif cur_type == '判断题':
             q, ans = parse_judge_answer(text)
