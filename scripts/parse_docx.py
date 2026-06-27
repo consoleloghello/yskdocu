@@ -14,7 +14,7 @@ def is_chapter_title(text):
 
 def extract_question_type(text):
     clean = re.sub(r'[（(].*?[）)]', '', text).strip()
-    m = re.match(r'^[一二三四五]、(.+)', clean)
+    m = re.match(r'^[一二三四五六七八九十]、(.+)', clean)
     if not m:
         return None
     name = m.group(1)
@@ -28,7 +28,7 @@ def extract_question_type(text):
 
 
 def is_question_type(text):
-    return any(text.startswith(p) for p in ['一、', '二、', '三、', '四、', '五、'])
+    return bool(re.match(r'^[一二三四五六七八九十]、', text))
 
 
 def parse_choice_answer(text):
@@ -58,8 +58,8 @@ def parse_judge_answer(text):
 def is_generic_continuation(text):
     if not text: return True
     if re.match(r'^[①②③④⑤⑥⑦⑧⑨⑩]', text): return True
-    if re.match(r'^[（(]?\s*[1-9]\s*[）)]', text): return True
-    if len(text) < 8: return True
+    if re.match(r'^[（(]?\s*[1-9]\d*\s*[）).、]', text): return True
+    if len(text) < 6: return True
     if re.match(r'^[\-\•\*]', text): return True
     return False
 
@@ -67,8 +67,20 @@ def is_generic_continuation(text):
 def looks_like_new_question(text):
     if not text: return False
     if is_generic_continuation(text): return False
-    if text.endswith('？') or text.endswith('?'): return True
-    if len(text) >= 14 and not text.endswith('：'): return True
+    if is_question_type(text): return True
+    if is_chapter_title(text): return True
+    # Strong signals of a new question — question marks
+    if text.endswith('？') or text.endswith('?'):
+        return True
+    # Answer preamble lines: "答案：xxx" or "答：xxx"
+    if re.match(r'^(答案|答|解析|说明|参考)', text):
+        return False
+    # Numbered markers that start a line — typically answer steps (①, 1., (1), etc.)
+    if re.match(r'^\d+[.、)）]', text):
+        return False
+    # Longer text that doesn't start with answer-like keywords is more likely a new question
+    if len(text) >= 20 and not text.startswith(('答案', '答', '解析', '说明')):
+        return True
     return False
 
 
@@ -125,12 +137,28 @@ def parse_docx(filepath):
             if re.search(r'[（(]\s*[A-D]\s*[）)]', text):
                 ans, q = parse_choice_answer(text)
                 opts = []
-                if i + 1 < len(raw):
+                # Collect all consecutive option paragraphs (each may contain 1-4 options)
+                while i + 1 < len(raw) and re.match(r'[A-D]\s*[.、）]', raw[i + 1]):
                     nxt = raw[i + 1]
-                    if re.match(r'[A-D]\s*[.、）]', nxt):
-                        opts = parse_options(nxt)
-                        i += 1
+                    # Check if multiple options exist on the same line
+                    if re.search(r'[A-D]\s*[.、）].*[A-D]\s*[.、）]', nxt):
+                        opts.extend(parse_options(nxt))
+                    else:
+                        opts.append(nxt)
+                    i += 1
                 questions.append({'question': q or text, 'options': opts, 'answer': ans})
+            elif i + 1 < len(raw) and re.match(r'[A-D]\s*[.、）]', raw[i + 1]):
+                # 选择题 without inline answer marker: capture options from following lines
+                opts = []
+                ans = ''
+                while i + 1 < len(raw) and re.match(r'[A-D]\s*[.、）]', raw[i + 1]):
+                    nxt = raw[i + 1]
+                    if re.search(r'[A-D]\s*[.、）].*[A-D]\s*[.、）]', nxt):
+                        opts.extend(parse_options(nxt))
+                    else:
+                        opts.append(nxt)
+                    i += 1
+                questions.append({'question': text, 'options': opts, 'answer': ans})
 
         elif cur_type == '判断题':
             q, ans = parse_judge_answer(text)

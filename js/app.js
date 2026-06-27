@@ -15,22 +15,37 @@ function lss(key,v){ try{ localStorage.setItem(key, JSON.stringify(v)) }catch(e)
 function loadState(){
   const s = ls('ysk_state');
   if(s) Object.assign(state, s);
+  // Per-version wrongBook so switching versions doesn't lose mistaken questions
+  const wb = ls('ysk_wrong_' + state.version);
+  if(wb) state.wrongBook = wb;
+  else state.wrongBook = {};
   const r = ls('ysk_revealed');
   if(r) revealed = new Set(r);
 }
-function saveState(){ lss('ysk_state', state); lss('ysk_revealed', [...revealed]); }
+function saveState(){
+  const {wrongBook, ...rest} = state;
+  lss('ysk_state', rest);
+  lss('ysk_wrong_' + state.version, wrongBook);
+  lss('ysk_revealed', [...revealed]);
+}
 
 async function loadData(ver){
   try {
     const r = await fetch('data/'+ver+'.json');
+    if(!r.ok) throw new Error('HTTP '+r.status);
     data = await r.json();
     buildFlat();
     state.version = ver;
+    // Load per-version wrongBook
+    const wb = ls('ysk_wrong_' + ver);
+    if(wb) state.wrongBook = wb;
+    else state.wrongBook = {};
     if(state.chapter!='all' && !data.chapters.find(c=>c.name===state.chapter)) state.chapter='all';
     saveState();
     render();
   } catch(e){
-    $('welcomeStats').textContent='加载失败';
+    $('welcomeStats').textContent='加载失败，请检查网络连接后刷新页面重试';
+    console.error('loadData error:', e);
   }
 }
 
@@ -60,7 +75,13 @@ function getCurrentQs(){
 
 function searchIn(arr, query){
   const q = query.toLowerCase();
-  return arr.filter(item => (item.question+' '+item.answer+' '+item._chapter+' '+item._type).toLowerCase().includes(q));
+  return arr.filter(item => {
+    const haystack = [
+      item.question, item.answer, item._chapter, item._type,
+      ...(item.options || [])
+    ].join(' ');
+    return haystack.toLowerCase().includes(q);
+  });
 }
 
 function countByType(arr){
@@ -70,6 +91,7 @@ function countByType(arr){
 }
 
 function render(){
+  if(!data) return; // guard against render before data loads
   renderChapters();
   renderTypeFilters();
   updateStats();
@@ -224,7 +246,8 @@ function updateTopActions(){
   $('hideAllBtn').style.display = shown > 0 ? 'inline-block' : 'none';
 }
 
-function esc(t){ if(!t) return ''; const d=document.createElement('div'); d.textContent=t; return d.innerHTML; }
+var _escNode;
+function esc(t){ if(!t) return ''; if(!_escNode) _escNode = document.createElement('div'); _escNode.textContent=t; return _escNode.innerHTML; }
 
 function updateStats(){
   if(!data) return;
@@ -233,21 +256,16 @@ function updateStats(){
 }
 
 // Search
-var __el__ = $('searchInput'); if (__el__) __el__.addEventListener('input', ()=>{
+$('searchInput').addEventListener('input', ()=>{
   const v = $('searchInput').value.trim();
   $('searchClear').style.display = v ? 'inline' : 'none';
   state.searchQuery = v;
-  if(v){
-    state.mode = 'search';
-    state.chapter = 'all';
-  } else {
-    state.mode = 'browse';
-    state.chapter = 'all';
-  }
+  state.mode = v ? 'search' : 'browse';
+  if(v) state.chapter = 'all';
   state.type = 'all';
   saveState(); render();
 });
-var __el__ = $('searchClear'); if (__el__) __el__.addEventListener('click', ()=>{
+$('searchClear').addEventListener('click', ()=>{
   $('searchInput').value = '';
   $('searchClear').style.display = 'none';
   state.searchQuery = '';
@@ -257,7 +275,7 @@ var __el__ = $('searchClear'); if (__el__) __el__.addEventListener('click', ()=>
 });
 
 // Stats modal
-var __el__ = $('statsBtn'); if (__el__) __el__.addEventListener('click', ()=>{
+$('statsBtn').addEventListener('click', ()=>{
   const total = flatQs.length;
   const wrong = Object.keys(state.wrongBook).length;
   $('statsBody').innerHTML = `
@@ -269,17 +287,17 @@ var __el__ = $('statsBtn'); if (__el__) __el__.addEventListener('click', ()=>{
   `;
   $('statsModal').style.display = 'flex';
 });
-var __el__ = $('statsClose'); if (__el__) __el__.addEventListener('click', ()=>{ $('statsModal').style.display='none'; });
-var __el__ = $('statsModal'); if (__el__) __el__.addEventListener('click', e=>{ if(e.target===e.currentTarget) e.currentTarget.style.display='none'; });
+$('statsClose').addEventListener('click', ()=>{ $('statsModal').style.display='none'; });
+$('statsModal').addEventListener('click', e=>{ if(e.target===e.currentTarget) e.currentTarget.style.display='none'; });
 
 // Top action buttons
-var __el__ = $('wrongBookBtn'); if (__el__) __el__.addEventListener('click', ()=>{
+$('wrongBookBtn').addEventListener('click', ()=>{
   state.mode = 'wrong';
   state.chapter = 'all'; state.type = 'all'; state.searchQuery = '';
   $('searchInput').value = '';
   saveState(); render();
 });
-var __el__ = $('shuffleBtn'); if (__el__) __el__.addEventListener('click', ()=>{
+$('shuffleBtn').addEventListener('click', ()=>{
   if(!_currentQs.length) return;
   const qs = [..._currentQs];
   for(let i=qs.length-1; i>0; i--){
@@ -288,67 +306,51 @@ var __el__ = $('shuffleBtn'); if (__el__) __el__.addEventListener('click', ()=>{
   }
   renderCards(qs);
 });
-var __el__ = $('revealAllBtn'); if (__el__) __el__.addEventListener('click', ()=>{
+$('revealAllBtn').addEventListener('click', ()=>{
   _currentQs.forEach(q => revealed.add(q._id));
   saveState(); renderCards(_currentQs);
 });
-var __el__ = $('hideAllBtn'); if (__el__) __el__.addEventListener('click', ()=>{
+$('hideAllBtn').addEventListener('click', ()=>{
   _currentQs.forEach(q => revealed.delete(q._id));
   saveState(); renderCards(_currentQs);
 });
 
-
-
 // Version switch (header buttons)
-var __el__waic = document.getElementById('verWaic');
-var __el__nei = document.getElementById('verNei');
-if (__el__waic) __el__waic.addEventListener('click', function() {
-  if (state.version === '外操版') return;
-  __el__waic.classList.add('active');
-  __el__nei.classList.remove('active');
-  state.wrongBook = {};
+function switchVersion(ver){
+  if(state.version === ver) return;
+  if(ver === '外操版'){
+    $('verWaic').classList.add('active');
+    $('verNei').classList.remove('active');
+  } else {
+    $('verNei').classList.add('active');
+    $('verWaic').classList.remove('active');
+  }
   state.chapter = 'all';
   state.type = 'all';
   state.searchQuery = '';
   state.mode = 'browse';
-  document.getElementById('searchInput').value = '';
-  loadData('外操版');
-});
-if (__el__nei) __el__nei.addEventListener('click', function() {
-  if (state.version === '内操版') return;
-  __el__nei.classList.add('active');
-  __el__waic.classList.remove('active');
-  state.wrongBook = {};
-  state.chapter = 'all';
-  state.type = 'all';
-  state.searchQuery = '';
-  state.mode = 'browse';
-  document.getElementById('searchInput').value = '';
-  loadData('内操版');
-});
+  $('searchInput').value = '';
+  loadData(ver);
+}
+
+$('verWaic').addEventListener('click', function(){ switchVersion('外操版'); });
+$('verNei').addEventListener('click', function(){ switchVersion('内操版'); });
 // ===== Entry Overlay =====
 (function initOverlay() {
   const overlay = document.getElementById('entryOverlay');
   if (!overlay) return;
 
   const cards = overlay.querySelectorAll('.overlay-card');
-  const verWaic = document.getElementById('verWaic');
-  const verNei = document.getElementById('verNei');
 
   function handleVersionSelect(ver) {
-    if (ver === '外操版') {
-      verWaic.classList.add('active');
-      verNei.classList.remove('active');
-    } else {
-      verNei.classList.add('active');
-      verWaic.classList.remove('active');
-    }
-    state.wrongBook = {};
+    // Save version to localStorage early so loadState can find wrongBook on reload
+    state.version = ver;
     state.chapter = 'all';
     state.type = 'all';
     state.searchQuery = '';
     state.mode = 'browse';
-    document.getElementById('searchInput').value = '';
+    state.wrongBook = {};
+    $('searchInput').value = '';
     saveState();
 
     overlay.classList.add('exit');
@@ -388,5 +390,3 @@ if (__el__nei) __el__nei.addEventListener('click', function() {
 // Init
 loadState();
 })();
-
-
