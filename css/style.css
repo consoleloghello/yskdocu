@@ -280,3 +280,282 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     font-size: 44px;
   }
 }
+
+/* ===== Auth buttons (header) ===== */
+.auth-login-btn {
+  padding: 4px 10px;
+  font-size: 12px;
+  border: 1px solid var(--primary);
+  border-radius: 6px;
+  background: var(--primary-light);
+  color: var(--primary);
+  cursor: pointer;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: .15s;
+}
+.auth-login-btn:hover {
+  background: var(--primary);
+  color: #fff;
+}
+.auth-user-info {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.auth-user-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.auth-logout-btn {
+  padding: 2px 8px;
+  font-size: 11px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--card);
+  color: var(--text2);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.auth-logout-btn:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+/* ===== Login Modal ===== */
+.login-modal-content {
+  max-width: 340px;
+}
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.login-form input[type="email"],
+.login-form input[type="password"] {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+  background: var(--card);
+}
+.login-form input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+.login-error {
+  font-size: 12px;
+  color: var(--danger);
+  min-height: 16px;
+}
+.login-submit-btn {
+  padding: 10px;
+  border: none;
+  border-radius: 8px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: .15s;
+}
+.login-submit-btn:active {
+  opacity: 0.85;
+}
+.login-submit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.login-cancel-btn {
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text2);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* ===== Card action buttons (笔记 / 报错) ===== */
+.q-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.q-action-btn {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--text2);
+  transition: .15s;
+}
+.q-action-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.q-action-btn:active {
+  background: var(--primary-light);
+}
+
+/* ===== Note Modal ===== */
+.note-textarea {
+  width: 100%;
+  min-height: 120px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.6;
+  font-family: inherit;
+  resize: vertical;
+  background: var(--card);
+  color: var(--text);
+}
+.note-textarea:focus {
+  border-color: var(--primary);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+.note-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  justify-content: flex-end;
+}
+.note-save-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.note-delete-btn {
+  padding: 8px 16px;
+  border: 1px solid var(--danger);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--danger);
+  font-size: 13px;
+  cursor: pointer;
+}
+.note-cancel-btn {
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--text2);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* ===== Report Modal ===== */
+.report-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.report-label {
+  font-size: 13px;
+  color: var(--text2);
+  margin-bottom: 4px;
+}
+.report-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: .15s;
+}
+.report-option:hover {
+  border-color: var(--primary);
+  background: var(--primary-light);
+}
+.report-option input[type="radio"] {
+  accent-color: var(--primary);
+}
+.report-textarea {
+  width: 100%;
+  min-height: 80px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  font-family: inherit;
+  resize: vertical;
+  background: var(--card);
+  color: var(--text);
+}
+.report-textarea:focus {
+  border-color: var(--primary);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+.report-msg {
+  font-size: 12px;
+  min-height: 16px;
+}
+.report-msg:not(:empty) {
+  color: var(--success);
+}
+.report-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.report-submit-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.report-submit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.report-cancel-btn {
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--text2);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* ===== Stats divider ===== */
+.stat-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 12px 0;
+}
+
+/* ===== Chart container ===== */
+.chart-container {
+  display: flex;
+  justify-content: center;
+  max-width: 280px;
+  margin: 0 auto;
+}

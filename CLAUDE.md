@@ -1,89 +1,111 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+此文件为 Claude Code (claude.ai/code) 在此仓库中工作时提供指导。
 
-## Project overview
+## 项目概述
 
-A mobile-first SPA flashcard app for a chemical plant's public utilities exam question bank. Pure static files — no build step, no backend, no framework. Deployed to GitHub Pages.
+化工企业公用工程岗位的移动端刷题 SPA（单页应用）。支持外操版和内操版两套题库，涵盖 9 大专业系统（火炬、给水加压泵站、罐区、锅炉、空压站、污水预处理、循环水站、制冷站、制氮站）。
 
-## Commands
+**在线地址**：https://consoleloghello.github.io/yskdocu/
+
+**后端功能（开发中）**：Supabase 提供错题云同步、答题统计、题目纠错反馈、题目笔记等登录用户功能。方案详见 `docs/后端功能方案设计.md`。
+
+## 命令
 
 ```bash
-# Local dev server (recommended — handles CJK filenames in URL encoding)
+# 本地开发服务器（推荐 — 正确解析中文文件名）
 node serve.mjs                    # → http://127.0.0.1:8081
 
-# Alternative: Python HTTP server
-python -m http.server 8899 --directory D:\workSpace\yskdoc
+# 备选：Python HTTP 服务器
+python -m http.server 8899
 
-# Re-parse docx source files into JSON
-python scripts/parse_docx.py      # reads .docx from repo root, writes data/*.json
+# 重新解析 docx 题库文件输出 JSON
+python scripts/parse_docx.py      # 读取根目录下的 .docx，写入 data/*.json
+
+# Supabase 数据库初始化
+# 在 Supabase Dashboard → SQL Editor 中执行 scripts/init_supabase.sql
 ```
 
-There is no build step, no test suite, and no linter configured.
+无构建步骤、无测试套件、无代码检查工具。
 
-## Architecture
+## 架构
 
-**Data pipeline:** `.docx` source files → `scripts/parse_docx.py` → `data/外操版.json` + `data/内操版.json` → browser loads via `fetch()` → rendered as question cards.
+### 数据管道
 
-**Frontend** (`index.html` + `css/style.css` + `js/app.js`): a single IIFE in `app.js` manages everything. No framework, no modules, no bundler. The app has four conceptual layers all in one file:
+```
+.docx 源文件 → scripts/parse_docx.py → data/外操版.json + data/内操版.json → 浏览器 fetch() → 渲染为题目卡片
+```
 
-| Layer | Responsibility |
+### 前端架构（匿名模式）
+
+`index.html` + `css/style.css` + `js/app.js`。`app.js` 是一个 IIFE，包含四个逻辑层：
+
+| 层 | 职责 |
 |---|---|
-| DataLoader | `fetch()` JSON by version, `buildFlat()` flattens nested chapters/type-groups into `flatQs[]` with synthetic `_id`/`_chapter`/`_type` fields |
-| StateManager | `state` object persisted to `localStorage` under keys `ysk_state` and `ysk_revealed`. See fields below. |
-| Renderer | `render()` orchestrates `renderChapters()`, `renderTypeFilters()`, `renderCards(qs)`. Full re-render on every state change (no virtual DOM). |
-| Event handlers | Inline `addEventListener` bindings for search, chip clicks, type filters, answer reveal, version switch, entry overlay, stats modal. |
+| DataLoader | `fetch()` 加载 JSON，`buildFlat()` 将嵌套结构展平为 `flatQs[]`，合成 `_id`/`_chapter`/`_type` |
+| StateManager | `state` 全局对象，持久化到 localStorage（`ysk_state`, `ysk_revealed`, `ysk_wrong_${version}`） |
+| Renderer | `render()` 编排 `renderChapters()` / `renderTypeFilters()` / `renderCards(qs)`，每次状态变化全量重渲染 |
+| Event Handlers | 搜索、chip 点击、题型筛选、答案展示、版本切换、入口遮罩、统计弹窗 |
 
-**State object** (`state` global, synced to `ysk_state` in localStorage):
-- `version`: `"外操版"` | `"内操版"`
-- `chapter`: `"all"` | chapter name string
-- `type`: `"all"` | question type string
-- `searchQuery`: current search input text
-- `mode`: `"browse"` | `"wrong"` | `"search"`
-- `wrongBook`: `{ [q._id]: true }` — auto-populated on wrong answers; persisted per-version under `ysk_wrong_${version}`
-- `stats`: reserved object (currently unused in rendering)
+### 前端架构（登录模式，开发中）
 
-**Revealed state** (`revealed` Set, synced to `ysk_revealed`): tracks which question IDs have their answer currently shown.
+登录后在前端直接操作 Supabase 数据库（通过 supabase-js SDK），不经过中间后端服务：
 
-**localStorage keys:** `ysk_state`, `ysk_revealed`, `ysk_wrong_外操版`, `ysk_wrong_内操版`
+| 新文件 | 职责 |
+|------|------|
+| `js/supabase.js` | 初始化 supabase 客户端、登录/登出 UI、session 管理 |
+| `js/sync.js` | 云端 CRUD 封装：错题增删、统计上报、笔记读写、报错提交 |
 
-**Key functions in `app.js`:**
-- `loadData(ver)` — fetch JSON, call `buildFlat()`, render
-- `getCurrentQs()` — filter `flatQs` by `state` (chapter → type → search → wrong-book mode)
-- `renderCards(qs)` — generate card HTML, bind per-card events (answer reveal, option click)
-- `esc()` — XSS-safe text escaping via DOM textContent
+登录后数据同时写入 localStorage（缓存）和 Supabase（主存储），离线不阻塞。
 
-**Version switching** now preserves per-version wrongBook — each version's mistaken questions are stored independently under `ysk_wrong_${version}` and restored when switching back. The entry overlay and header toggle share a `resetViewState()` helper for filter resets.
+### 本地状态 (localStorage)
 
-**Entry overlay** (`#entryOverlay`): full-screen blur backdrop shown on every page load. User must pick 外操版 or 内操版 to enter. No "remember choice" — this is intentional.
+| Key | 内容 |
+|---|---|
+| `ysk_state` | `{ version, chapter, type, searchQuery, mode, wrongBook, stats }` |
+| `ysk_revealed` | 已显示答案的题目 ID 数组 |
+| `ysk_wrong_外操版` | 外操版错题本 `{ id: true }` |
+| `ysk_wrong_内操版` | 内操版错题本 `{ id: true }` |
 
-## docx parser (`scripts/parse_docx.py`)
+### 展平后的题目模型 (flatQs)
 
-- Uses `python-docx` to extract paragraph text only (ignores styles — all docx content is Normal style).
-- Chapter detection: exact-match against a hardcoded `KNOWN_CHAPTERS` list. If the source docx adds a new chapter, this list must be updated.
-- Question type detection: regex matches on `一、…` through `五、…` prefix patterns.
-- Answer extraction: regex for `（A）` / `（√）` / `（×）` markers inline in question text.
-- Short-answer merging: heuristic `looks_like_new_question()` decides whether a paragraph starts a new question or continues the previous answer. This heuristic can fail — see known issues in 交接文档.md.
-- Output JSON structure: `{ info: { title, version, total }, chapters: [{ name, type_groups: [{ type, questions: [{ question, options?, answer }] }] }] }`
-
-## Data model
-
-Each question object in `flatQs`:
-```
+```javascript
 {
-  _id: "火炬_选择题_0",     // synthetic: chapter_type_index
+  _id: "火炬_选择题_0",     // 合成 ID：章节_题型_序号
   _chapter: "火炬",
   _type: "选择题",
   question: "...",
-  options: ["A. ...", ...],  // only for 选择题
+  options: ["A. ...", ...],  // 仅选择题
   answer: "B" | "√" | "×" | text
 }
 ```
 
-## Key constraints
+### 版本切换
 
-- **Zero dependencies in production**: the SPA is a single HTML file + one CSS file + one JS file + two JSON data files. No npm packages appear in the frontend.
-- **Mobile-first**: all CSS is responsive down to 320px. Sticky header, horizontal-scroll chip nav, touch-friendly tap targets.
-- **No offline/PWA support**: Service Worker not implemented (listed as P3 tech debt).
-- **CJK filenames**: the JSON files have Chinese names. `serve.mjs` includes `decodeURIComponent` to handle this; Python's `http.server` may not.
-- **LocalStorage is the only persistence**: no server, no IndexedDB. All state is lost if localStorage is cleared.
+键是 `app.js` 中的 `resetViewState()` 辅助函数。
+
+## docx 解析器 (`scripts/parse_docx.py`)
+
+- 使用 `python-docx` 提取段落纯文本（忽略样式 — 所有 docx 内容均为 Normal 样式）
+- 章节检测：根据 `KNOWN_CHAPTERS` 硬编码列表精确匹配。如果源 docx 新增章节，需要更新此列表
+- 题型检测：正则匹配 `一、…` 到 `五、…` 前缀
+- 答案提取：正则匹配 `（A）` / `（√）` / `（×）`
+- 简答题合并：启发式函数 `looks_like_new_question()` 判断是否为新题目，可能出错
+- 输出格式：`{ info: { title, version, total }, chapters: [{ name, type_groups: [{ type, questions: [{ question, options?, answer }] }] }] }`
+
+## 关键约束
+
+- **生产环境零依赖**：SPA 由 1 个 HTML + 1 个 CSS + 1 个 JS + 2 个 JSON 组成（后端功能引入后增加 supabase-js CDN 和 Chart.js CDN）
+- **移动端优先**：响应式 CSS 适配到 320px。粘性顶部栏、横向滚动 chip 导航、适合触控的点击区域
+- **无离线/PWA 支持**：Service Worker 未实现（列为 P3 技术债）
+- **中文文件名**：JSON 文件名为中文。`serve.mjs` 包含 `decodeURIComponent` 处理；Python 的 `http.server` 可能无法正确处理
+- **localStorage 是匿名用户唯一持久化方式**：清除 localStorage 会丢失所有数据
+
+## 已知问题
+
+- **P1**：内操版给水加压泵站扩展题解析后显示异常（同名题型分组合并问题）
+- **P1**：搜索无高亮显示
+- **P1**：约 15 道选择题选项解析失败（docx 格式非标准）
+- **P2**：无夜间模式、无收藏功能、无答题历史
+- **P3**：无虚拟滚动（全量渲染 372 题可能较慢）
+- **P3**：无 Service Worker / PWA 离线支持

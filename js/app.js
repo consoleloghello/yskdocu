@@ -5,6 +5,7 @@ let data = null;
 let flatQs = [];
 let revealed = new Set();
 let state = { version:'外操版', chapter:'all', type:'all', searchQuery:'', mode:'browse', wrongBook:{}, stats:{} };
+let localNotes = {};  // 云端笔记缓存 { questionId: content }
 
 const $ = id => document.getElementById(id);
 const qList = $('questionList');
@@ -15,15 +16,12 @@ function lss(key,v){ try{ localStorage.setItem(key, JSON.stringify(v)) }catch(e)
 function loadState(){
   const s = ls('ysk_state');
   if(s) Object.assign(state, s);
-  // Per-version wrongBook; migrate legacy data from old single-key format
   const wb = ls('ysk_wrong_' + state.version);
   if(wb) {
     state.wrongBook = wb;
   } else if (!state.wrongBook || Object.keys(state.wrongBook).length === 0) {
-    // No per-version key and no legacy data — start fresh
     state.wrongBook = {};
   }
-  // else: preserve wrongBook Object.assign copied from legacy ysk_state (migration path)
   const r = ls('ysk_revealed');
   if(r) revealed = new Set(r);
 }
@@ -40,11 +38,9 @@ async function loadData(ver){
     if(!r.ok) throw new Error('HTTP '+r.status);
     data = await r.json();
     buildFlat();
-    // Default: reveal all answers on page load / version switch
     revealed.clear();
     flatQs.forEach(q => revealed.add(q._id));
     state.version = ver;
-    // Update header toggle to reflect the loaded version (only after successful load)
     if(ver === '外操版'){
       $('verWaic').classList.add('active');
       $('verNei').classList.remove('active');
@@ -52,16 +48,60 @@ async function loadData(ver){
       $('verNei').classList.add('active');
       $('verWaic').classList.remove('active');
     }
-    // Load per-version wrongBook
     const wb = ls('ysk_wrong_' + ver);
     if(wb) state.wrongBook = wb;
     else state.wrongBook = {};
     if(state.chapter!='all' && !data.chapters.find(c=>c.name===state.chapter)) state.chapter='all';
     saveState();
+    // 登录状态下拉取云端错题和笔记
+    pullCloudData(ver);
     render();
   } catch(e){
     $('welcomeStats').textContent='加载失败，请检查网络连接后刷新页面重试';
     console.error('loadData error:', e);
+  }
+}
+
+// ============================================================
+// 云端数据同步（登录用户）
+// ============================================================
+
+/** 拉取云端错题本和笔记，合并到本地 */
+async function pullCloudData(ver) {
+  if (!window.Sync || !window.SupabaseAuth || !window.SupabaseAuth.isLoggedIn()) return;
+  try {
+    // 拉取云端错题
+    var cloudWrong = await window.Sync.getWrongQuestions(ver);
+    if (cloudWrong && cloudWrong.length) {
+      cloudWrong.forEach(function(id) { state.wrongBook[id] = true; });
+      saveState();
+    }
+    // 拉取云端笔记
+    var notes = await window.Sync.getNotes(ver);
+    if (notes) localNotes = notes;
+  } catch(e) {
+    console.error('pullCloudData error:', e);
+  }
+}
+
+/** 监听认证状态变化 */
+function initAuthSync() {
+  if (typeof window.SupabaseAuth === 'undefined') return;
+
+  window.SupabaseAuth.onAuthStateChange(function(user) {
+    if (user) {
+      // 登录：合并云端数据
+      pullCloudData(state.version).then(function() { render(); });
+    } else {
+      // 登出：清除笔记缓存，保留本地错题
+      localNotes = {};
+      render();
+    }
+  });
+
+  // 页面初始化时检查是否已登录
+  if (window.SupabaseAuth.isLoggedIn()) {
+    pullCloudData(state.version).then(function() { render(); });
   }
 }
 
@@ -107,7 +147,7 @@ function countByType(arr){
 }
 
 function render(){
-  if(!data) return; // guard against render before data loads
+  if(!data) return;
   renderChapters();
   renderTypeFilters();
   updateStats();
@@ -176,6 +216,7 @@ let _currentQs = [];
 function renderCards(qs){
   _currentQs = qs;
   const isSearch = state.searchQuery!=='';
+  const isLoggedIn = window.SupabaseAuth && window.SupabaseAuth.isLoggedIn();
   let h = `<div id="listInfo" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
     <span style="font-size:13px;color:var(--text2)">共 ${qs.length} 题${isSearch?' (搜索结果)':''}</span>
     <span style="font-size:12px;color:var(--text2)">点击选项/按钮显示答案</span>
@@ -183,6 +224,7 @@ function renderCards(qs){
   qs.forEach((q, idx) => {
     const isRevealed = revealed.has(q._id);
     const isWrong = state.wrongBook[q._id];
+    const hasNote = localNotes[q._id];
     h += `<div class="q-card" data-id="${q._id}">
       <div class="q-card-header">
         <span class="q-type-badge">${q._type}</span>
@@ -212,6 +254,13 @@ function renderCards(qs){
     h += `<div class="q-answer ${showAns?'visible':''}"><div class="label">📝 参考答案</div>${esc(ansHtml)}</div>`;
     if(!isDirect){
       h += `<button class="q-show-answer-btn" data-id="${q._id}">${isRevealed?'隐藏答案':'显示答案'}</button>`;
+    }
+    // 登录用户：笔记和报错按钮
+    if(isLoggedIn){
+      h += `<div class="q-actions">
+        <button class="q-action-btn q-note-btn" data-id="${q._id}">${hasNote ? '📝✏️' : '📝'} 笔记</button>
+        <button class="q-action-btn q-report-btn" data-id="${q._id}">🐛 报错</button>
+      </div>`;
     }
     h += `</div>`;
   });
@@ -252,8 +301,36 @@ function renderCards(qs){
       }
       saveState();
       updateTopActions();
+      // 云端同步：记录答题 + 更新错题
+      logAnswer(q, correct);
     });
   });
+  // Event: 笔记按钮
+  qList.querySelectorAll('.q-note-btn').forEach(btn => {
+    btn.addEventListener('click', function(e){
+      e.stopPropagation();
+      openNoteModal(this.dataset.id);
+    });
+  });
+  // Event: 报错按钮
+  qList.querySelectorAll('.q-report-btn').forEach(btn => {
+    btn.addEventListener('click', function(e){
+      e.stopPropagation();
+      openReportModal(this.dataset.id);
+    });
+  });
+}
+
+/** 云端记录答题结果（仅登录用户） */
+function logAnswer(q, isCorrect) {
+  if (!window.Sync || !window.SupabaseAuth || !window.SupabaseAuth.isLoggedIn()) return;
+  var id = q._id;
+  window.Sync.recordAnswer(state.version, id, q._chapter, q._type, isCorrect);
+  if (!isCorrect) {
+    window.Sync.addWrongQuestion(state.version, id, q._chapter, q._type);
+  } else {
+    window.Sync.removeWrongQuestion(state.version, id);
+  }
 }
 
 function updateTopActions(){
@@ -274,7 +351,116 @@ function updateStats(){
   $('welcomeStats').innerHTML = state.version+' · '+flatQs.length+' 道题 · 错题 '+wrong+' 道';
 }
 
+// ============================================================
+// 笔记弹窗
+// ============================================================
+function openNoteModal(questionId) {
+  var modal = $('noteModal');
+  var textarea = $('noteTextarea');
+  var saveBtn = $('noteSaveBtn');
+  var deleteBtn = $('noteDeleteBtn');
+  if (!modal || !textarea) return;
+
+  // 填充已有内容
+  textarea.value = localNotes[questionId] || '';
+  modal.dataset.questionId = questionId;
+  modal.style.display = 'flex';
+
+  // 保存
+  saveBtn.onclick = async function() {
+    var content = textarea.value.trim();
+    if (!content) {
+      // 空内容视为删除
+      delete localNotes[questionId];
+      if (window.Sync && window.SupabaseAuth && window.SupabaseAuth.isLoggedIn()) {
+        await window.Sync.deleteNote(state.version, questionId);
+      }
+    } else {
+      localNotes[questionId] = content;
+      if (window.Sync && window.SupabaseAuth && window.SupabaseAuth.isLoggedIn()) {
+        await window.Sync.saveNote(state.version, questionId, content);
+      }
+    }
+    modal.style.display = 'none';
+    renderCards(_currentQs);  // 刷新笔记图标
+  };
+
+  // 删除
+  if (deleteBtn) {
+    deleteBtn.onclick = async function() {
+      delete localNotes[questionId];
+      if (window.Sync && window.SupabaseAuth && window.SupabaseAuth.isLoggedIn()) {
+        await window.Sync.deleteNote(state.version, questionId);
+      }
+      modal.style.display = 'none';
+      renderCards(_currentQs);
+    };
+  }
+}
+
+// 关闭笔记弹窗
+(function() {
+  var modal = $('noteModal');
+  if (!modal) return;
+  $('noteClose').addEventListener('click', function() { modal.style.display = 'none'; });
+  $('noteCancel').addEventListener('click', function() { modal.style.display = 'none'; });
+  modal.addEventListener('click', function(e) { if (e.target === modal) modal.style.display = 'none'; });
+})();
+
+// ============================================================
+// 报错弹窗
+// ============================================================
+function openReportModal(questionId) {
+  var modal = $('reportModal');
+  if (!modal) return;
+  modal.dataset.questionId = questionId;
+  modal.style.display = 'flex';
+  // 清除上次选择
+  modal.querySelectorAll('input[name="reportReason"]').forEach(function(r) { r.checked = false; });
+  $('reportDetail').value = '';
+  $('reportMsg').textContent = '';
+}
+
+(function() {
+  var modal = $('reportModal');
+  if (!modal) return;
+  $('reportClose').addEventListener('click', function() { modal.style.display = 'none'; });
+  $('reportCancel').addEventListener('click', function() { modal.style.display = 'none'; });
+  modal.addEventListener('click', function(e) { if (e.target === modal) modal.style.display = 'none'; });
+
+  $('reportSubmit').addEventListener('click', async function() {
+    var questionId = modal.dataset.questionId;
+    var reasonEl = modal.querySelector('input[name="reportReason"]:checked');
+    var detail = $('reportDetail').value.trim();
+    var msgEl = $('reportMsg');
+
+    if (!reasonEl) {
+      msgEl.textContent = '请选择报错原因';
+      return;
+    }
+    if (!window.Sync || !window.SupabaseAuth || !window.SupabaseAuth.isLoggedIn()) {
+      msgEl.textContent = '请先登录';
+      return;
+    }
+
+    $('reportSubmit').disabled = true;
+    $('reportSubmit').textContent = '提交中...';
+
+    var result = await window.Sync.submitReport(state.version, questionId, reasonEl.value, detail);
+    if (result !== null) {
+      msgEl.textContent = '✅ 反馈已提交，感谢！';
+      setTimeout(function() { modal.style.display = 'none'; }, 1500);
+    } else {
+      msgEl.textContent = '提交失败，请稍后重试';
+    }
+    $('reportSubmit').disabled = false;
+    $('reportSubmit').textContent = '提交';
+  });
+})();
+
+// ============================================================
 // Search
+// ============================================================
 $('searchInput').addEventListener('input', ()=>{
   const v = $('searchInput').value.trim();
   $('searchClear').style.display = v ? 'inline' : 'none';
@@ -293,21 +479,85 @@ $('searchClear').addEventListener('click', ()=>{
   saveState(); render();
 });
 
-// Stats modal
-$('statsBtn').addEventListener('click', ()=>{
+// ============================================================
+// Stats modal（支持登录用户拉取云端统计 + Chart.js 图表）
+// ============================================================
+$('statsBtn').addEventListener('click', async function(){
   const total = flatQs.length;
   const wrong = Object.keys(state.wrongBook).length;
-  $('statsBody').innerHTML = `
+  const isLoggedIn = window.SupabaseAuth && window.SupabaseAuth.isLoggedIn();
+
+  var statsHtml = `
     <div class="stat-row"><span class="stat-label">题库版本</span><span class="stat-value">${state.version}</span></div>
     <div class="stat-row"><span class="stat-label">总题数</span><span class="stat-value">${total}</span></div>
     <div class="stat-row"><span class="stat-label">章节数</span><span class="stat-value">${data.chapters.length}</span></div>
     <div class="stat-row"><span class="stat-label">错题数</span><span class="stat-value">${wrong}</span></div>
     <div class="stat-row"><span class="stat-label">已显示答案</span><span class="stat-value">${revealed.size}</span></div>
   `;
-  $('statsModal').style.display = 'flex';
+
+  // 登录用户：显示云端统计和图表
+  if (isLoggedIn && window.Sync) {
+    var cloudStats = await window.Sync.getStats(state.version);
+    if (cloudStats && cloudStats.total > 0) {
+      statsHtml += `<div class="stat-divider"></div>
+        <div class="stat-row"><span class="stat-label">📊 云端答题总数</span><span class="stat-value">${cloudStats.total}</span></div>
+        <div class="stat-row"><span class="stat-label">✅ 正确率</span><span class="stat-value">${cloudStats.accuracy}%</span></div>
+        <div class="stat-row"><span class="stat-label">✔ 正确</span><span class="stat-value" style="color:var(--success)">${cloudStats.correct}</span></div>
+        <div class="stat-row"><span class="stat-label">✘ 错误</span><span class="stat-value" style="color:var(--danger)">${cloudStats.wrong}</span></div>
+      `;
+    }
+    // 图表容器
+    statsHtml += `<div class="stat-divider"></div>
+      <div class="chart-container" style="margin-top:12px">
+        <canvas id="statsPieChart" width="240" height="240"></canvas>
+      </div>`;
+
+    $('statsBody').innerHTML = statsHtml;
+    $('statsModal').style.display = 'flex';
+
+    // 渲染 Chart.js 饼图
+    renderStatsChart(cloudStats);
+  } else {
+    $('statsBody').innerHTML = statsHtml;
+    $('statsModal').style.display = 'flex';
+  }
 });
 $('statsClose').addEventListener('click', ()=>{ $('statsModal').style.display='none'; });
 $('statsModal').addEventListener('click', e=>{ if(e.target===e.currentTarget) e.currentTarget.style.display='none'; });
+
+/** 渲染统计饼图（正确/错误比例） */
+function renderStatsChart(cloudStats) {
+  if (typeof window.Chart === 'undefined') return;
+  var canvas = document.getElementById('statsPieChart');
+  if (!canvas) return;
+
+  // 销毁旧图表
+  if (canvas._chart) canvas._chart.destroy();
+
+  var correct = (cloudStats && cloudStats.correct) || 0;
+  var wrong = (cloudStats && cloudStats.wrong) || 0;
+  if (correct === 0 && wrong === 0) {
+    correct = 1; wrong = 0;  // 显示空白图表
+  }
+
+  canvas._chart = new window.Chart(canvas, {
+    type: 'doughnut',
+    data: {
+      labels: ['正确', '错误'],
+      datasets: [{
+        data: [correct, wrong],
+        backgroundColor: ['#22c55e', '#ef4444'],
+        borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { size: 12 }, padding: 16 } }
+      }
+    }
+  });
+}
 
 // Top action buttons
 $('wrongBookBtn').addEventListener('click', ()=>{
@@ -352,8 +602,6 @@ $('verNei').addEventListener('click', function(){ switchVersion('内操版'); })
   const cards = overlay.querySelectorAll('.overlay-card');
 
   function handleVersionSelect(ver) {
-    // Reset filters and set target version; wrongBook is NOT cleared here —
-    // loadData restores the per-version wrongBook from localStorage.
     state.version = ver;
     resetViewState();
 
@@ -393,4 +641,6 @@ $('verNei').addEventListener('click', function(){ switchVersion('内操版'); })
 
 // Init
 loadState();
+// 启动认证状态监听
+initAuthSync();
 })();

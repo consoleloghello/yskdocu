@@ -40,6 +40,11 @@
     <div class="header-inner">
       <h1 class="logo">📁 公用工程题库</h1>
       <div class="header-right">
+        <button id="loginBtn" class="auth-login-btn" title="登录">🔐 登录</button>
+        <span id="userInfo" class="auth-user-info" style="display:none">
+          <span id="userName" class="auth-user-name"></span>
+          <button id="logoutBtn" class="auth-logout-btn">登出</button>
+        </span>
         <button id="statsBtn" class="icon-btn" title="统计">📊</button>
         <div class="version-switch">
           <button id="verWaic" class="ver-btn active">外操版</button>
@@ -95,6 +100,61 @@
   </div>
 </div>
 
+<!-- Login Modal -->
+<div id="loginModal" class="modal" style="display:none">
+  <div class="modal-content login-modal-content">
+    <h2>🔐 登录</h2>
+    <div class="login-form">
+      <input id="loginEmail" type="email" placeholder="邮箱地址" autocomplete="email">
+      <input id="loginPassword" type="password" placeholder="密码" autocomplete="current-password">
+      <p id="loginError" class="login-error"></p>
+      <button id="loginSubmit" class="login-submit-btn">登录</button>
+      <button id="loginCancel" class="login-cancel-btn">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- Note Modal -->
+<div id="noteModal" class="modal" style="display:none">
+  <div class="modal-content">
+    <span id="noteClose" class="modal-close">✕</span>
+    <h2>📝 题目笔记</h2>
+    <textarea id="noteTextarea" class="note-textarea" placeholder="写下对这道题的笔记..."></textarea>
+    <div class="note-actions">
+      <button id="noteSaveBtn" class="note-save-btn">💾 保存</button>
+      <button id="noteDeleteBtn" class="note-delete-btn">🗑 删除</button>
+      <button id="noteCancel" class="note-cancel-btn">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- Report Modal -->
+<div id="reportModal" class="modal" style="display:none">
+  <div class="modal-content">
+    <span id="reportClose" class="modal-close">✕</span>
+    <h2>🐛 题目纠错反馈</h2>
+    <div class="report-form">
+      <p class="report-label">报错原因：</p>
+      <label class="report-option"><input type="radio" name="reportReason" value="答案有误"> 答案有误</label>
+      <label class="report-option"><input type="radio" name="reportReason" value="题目描述不清"> 题目描述不清</label>
+      <label class="report-option"><input type="radio" name="reportReason" value="选项缺失或错误"> 选项缺失或错误</label>
+      <label class="report-option"><input type="radio" name="reportReason" value="其他"> 其他</label>
+      <textarea id="reportDetail" class="report-textarea" placeholder="补充说明（选填）..."></textarea>
+      <p id="reportMsg" class="report-msg"></p>
+      <div class="report-actions">
+        <button id="reportSubmit" class="report-submit-btn">提交</button>
+        <button id="reportCancel" class="report-cancel-btn">取消</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CDN: Supabase SDK + Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<!-- App scripts -->
+<script src="js/supabase.js"></script>
+<script src="js/sync.js"></script>
 <script src="js/app.js?v=2"></script>
 </body>
 </html>
