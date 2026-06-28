@@ -14,7 +14,7 @@
 
 ```bash
 # 本地开发服务器（推荐 — 正确解析中文文件名）
-node serve.mjs                    # → http://127.0.0.1:8081
+node scripts/serve.mjs            # → http://127.0.0.1:8081
 
 # 备选：Python HTTP 服务器
 python -m http.server 8899
@@ -24,6 +24,9 @@ python scripts/parse_docx.py      # 读取根目录下的 .docx，写入 data/*.
 
 # Supabase 数据库初始化
 # 在 Supabase Dashboard → SQL Editor 中执行 scripts/init_supabase.sql
+
+# 生成更新日志文件（部署前运行）
+node scripts/gen_changelog.mjs     # 读取最近3条 git commit，输出 changelog.json
 ```
 
 无构建步骤、无测试套件、无代码检查工具。
@@ -66,6 +69,7 @@ python scripts/parse_docx.py      # 读取根目录下的 .docx，写入 data/*.
 | `ysk_revealed` | 已显示答案的题目 ID 数组 |
 | `ysk_wrong_外操版` | 外操版错题本 `{ id: true }` |
 | `ysk_wrong_内操版` | 内操版错题本 `{ id: true }` |
+| `ysk_changelog_seen` | 最后看到的 commit hash，用于控制更新公告弹窗 |
 
 ### 展平后的题目模型 (flatQs)
 
@@ -98,7 +102,7 @@ python scripts/parse_docx.py      # 读取根目录下的 .docx，写入 data/*.
 - **生产环境零依赖**：SPA 由 1 个 HTML + 1 个 CSS + 1 个 JS + 2 个 JSON 组成（后端功能引入后增加 supabase-js CDN 和 Chart.js CDN）
 - **移动端优先**：响应式 CSS 适配到 320px。粘性顶部栏、横向滚动 chip 导航、适合触控的点击区域
 - **无离线/PWA 支持**：Service Worker 未实现（列为 P3 技术债）
-- **中文文件名**：JSON 文件名为中文。`serve.mjs` 包含 `decodeURIComponent` 处理；Python 的 `http.server` 可能无法正确处理
+- **中文文件名**：JSON 文件名为中文。`scripts/serve.mjs` 包含 `decodeURIComponent` 处理；Python 的 `http.server` 可能无法正确处理
 - **localStorage 是匿名用户唯一持久化方式**：清除 localStorage 会丢失所有数据
 
 ## 已知问题

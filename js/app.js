@@ -459,6 +459,61 @@ function openReportModal(questionId) {
 })();
 
 // ============================================================
+// Changelog Modal
+// ============================================================
+(function() {
+  var modal = $('changelogModal');
+  var closeBtn = $('changelogClose');
+  var body = $('changelogBody');
+  if (!modal || !closeBtn || !body) return;
+
+  var pendingHash = null;
+
+  function closeChangelog() {
+    modal.style.display = 'none';
+    if (pendingHash) {
+      try { localStorage.setItem('ysk_changelog_seen', pendingHash); } catch(e) {}
+      pendingHash = null;
+    }
+  }
+  closeBtn.addEventListener('click', closeChangelog);
+  modal.addEventListener('click', function(e) {
+    if (e.target === modal) closeChangelog();
+  });
+
+  fetch('changelog.json')
+    .then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(function(data) {
+      var commits = data && data.commits;
+      if (!commits || !commits.length) return;
+
+      var html = '';
+      for (var i = 0; i < commits.length; i++) {
+        var c = commits[i];
+        html += '<div class="changelog-entry">'
+          + '<div class="changelog-date">' + esc(c.date) + '</div>'
+          + '<div class="changelog-msg">' + esc(c.message) + '</div>'
+          + '</div>';
+      }
+      body.innerHTML = html;
+
+      var latestHash = commits[0].hash;
+      var seen = null;
+      try { seen = localStorage.getItem('ysk_changelog_seen'); } catch(e) {}
+      if (seen !== latestHash) {
+        pendingHash = latestHash;
+        modal.style.display = 'flex';
+      }
+    })
+    .catch(function(err) {
+      console.warn('Changelog unavailable:', err.message);
+    });
+})();
+
+// ============================================================
 // Search
 // ============================================================
 $('searchInput').addEventListener('input', ()=>{

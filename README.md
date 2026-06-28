@@ -1,48 +1,67 @@
 # 公用工程题库 SPA
 
-公用工程题库的移动端刷题应用，纯静态单页面应用，可部署到 GitHub Pages。
+化工企业公用工程岗位的移动端刷题应用，纯静态单页面应用，部署于 GitHub Pages。
 
-## 在线浏览
+## 在线地址
 
 <https://consoleloghello.github.io/yskdocu/>
 
-## 使用
+## 功能
 
-直接打开 `index.html` 即可使用（需本地 HTTP 服务器，如 `python -m http.server`）。
+- **双题库切换**：外操版 / 内操版，覆盖 9 大专业系统（火炬、给水加压泵站、罐区、锅炉、空压站、污水预处理、循环水站、制冷站、制氮站）
+- **章节与题型筛选**：按章节 chip 导航 + 选择题 / 判断题 / 填空题 / 简答题分类过滤
+- **关键字搜索**：全文匹配题目内容
+- **答案展示**：点击卡片显示参考答案，支持一键展开/隐藏全部答案
+- **错题本**：自动记录错题，支持按版本独立管理（localStorage 持久化）
+- **学习统计**：总题数、章节数、错题数统计，登录用户可查看正确率饼图
+- **更新公告**：版本更新后首次访问自动弹出最近提交记录
+- **登录功能（Supabase）**：邮箱注册/登录，云端同步错题、题目笔记、纠错反馈、答题统计
 
-### 功能
-- 外操版 / 内操版 双题库切换
-- 按章节、题型筛选
-- 卡片式刷题
-- 关键字搜索（全文匹配）
-- 错题本自动记录（localStorage）
-- 随机抽题
+## 本地运行
+
+```bash
+# 推荐：Node.js 开发服务器（正确解析中文文件名）
+node scripts/serve.mjs            # → http://127.0.0.1:8081
+
+# 备选：Python HTTP 服务器
+python -m http.server 8899
+```
+
+无需 `npm install`，零依赖。
 
 ## 部署到 GitHub Pages
 
-```bash
-git add .
-git commit -m "初始版本：公用工程题库 SPA"
-git remote add origin https://github.com/<你的用户名>/<仓库名>.git
-git push -u origin main
-```
-
-然后在 GitHub 仓库 Settings → Pages 中，选择 `main` 分支，根目录部署即可。
-
-访问地址：`https://<你的用户名>.github.io/<仓库名>/`
+1. Push 到 GitHub 仓库的 `main` 分支
+2. 在仓库 Settings → Pages 中，选择 `main` 分支，根目录部署
+3. 部署前运行 `node scripts/gen_changelog.mjs` 更新公告数据
 
 ## 更新题库
 
 1. 修改 `公用工程题库（外操版）.docx` 或 `公用工程题库（内操版）.docx`
-2. 重新运行解析脚本：
+2. 运行解析脚本重新生成 JSON：
+
 ```bash
 python scripts/parse_docx.py
 ```
-3. 更新 `data/` 目录下的 JSON 文件
-4. 重新提交并推送
+
+3. 提交更新后的 `data/` 目录下 JSON 文件
+
+## 更新公告
+
+部署前生成最新的提交记录：
+
+```bash
+node scripts/gen_changelog.mjs     # 输出 changelog.json，需提交到仓库
+```
 
 ## 技术栈
 
-- 文档解析：Python + python-docx
-- 前端：Vanilla JS + CSS3
-- 部署：GitHub Pages
+| 层次 | 技术 |
+|------|------|
+| 前端 | Vanilla JS (IIFE) + CSS3 |
+| 文档解析 | Python 3 + python-docx |
+| 后端服务 | Supabase (PostgreSQL + Auth + REST API) |
+| 图表 | Chart.js v4 (CDN) |
+| 部署 | GitHub Pages 静态托管 |
+
+**零构建步骤、零 npm 依赖。**
