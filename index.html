@@ -40,7 +40,7 @@
     <div class="header-inner">
       <h1 class="logo">📁 公用工程题库</h1>
       <div class="header-right">
-        <button id="loginBtn" class="auth-login-btn" title="登录">🔐 登录</button>
+        <button id="loginBtn" class="auth-login-btn" title="登录/注册">🔐 登录</button>
         <span id="userInfo" class="auth-user-info" style="display:none">
           <span id="userName" class="auth-user-name"></span>
           <button id="logoutBtn" class="auth-logout-btn">登出</button>
@@ -100,15 +100,17 @@
   </div>
 </div>
 
-<!-- Login Modal -->
+<!-- Login / Register Modal -->
 <div id="loginModal" class="modal" style="display:none">
   <div class="modal-content login-modal-content">
-    <h2>🔐 登录</h2>
+    <h2 id="authTitle">🔐 登录</h2>
     <div class="login-form">
       <input id="loginEmail" type="email" placeholder="邮箱地址" autocomplete="email">
       <input id="loginPassword" type="password" placeholder="密码" autocomplete="current-password">
+      <input id="regNickname" type="text" placeholder="昵称（选填）" autocomplete="name" style="display:none">
       <p id="loginError" class="login-error"></p>
       <button id="loginSubmit" class="login-submit-btn">登录</button>
+      <p class="auth-toggle-text"><a id="authToggle" href="#">没有账号？<span id="authToggleText">注册</span></a></p>
       <button id="loginCancel" class="login-cancel-btn">取消</button>
     </div>
   </div>

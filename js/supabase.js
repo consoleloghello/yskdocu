@@ -1,6 +1,6 @@
 /**
  * Supabase 认证模块
- * 初始化客户端、管理登录/登出、监听认证状态变化
+ * 初始化客户端、管理登录/登出/注册、监听认证状态变化
  * 暴露为 window.SupabaseAuth
  *
  * 使用前需将下方的 SUPABASE_URL 和 SUPABASE_ANON_KEY 替换为实际值
@@ -51,6 +51,16 @@ if (supabase) {
 async function signIn(email, password) {
   if (!supabase) throw new Error('Supabase 未初始化');
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+  return data;
+}
+
+/** 邮箱密码注册 */
+async function signUp(email, password, nickname) {
+  if (!supabase) throw new Error('Supabase 未初始化');
+  var options = {};
+  if (nickname) options.data = { nickname: nickname };
+  const { data, error } = await supabase.auth.signUp({ email, password, options });
   if (error) throw error;
   return data;
 }
@@ -107,7 +117,7 @@ function updateAuthUI() {
 }
 
 // ============================================================
-// 登录弹窗事件绑定
+// 登录/注册弹窗事件绑定
 // ============================================================
 function initLoginModal() {
   var loginBtn = document.getElementById('loginBtn');
@@ -117,12 +127,37 @@ function initLoginModal() {
   var loginEmail = document.getElementById('loginEmail');
   var loginPassword = document.getElementById('loginPassword');
   var loginError = document.getElementById('loginError');
+  var authTitle = document.getElementById('authTitle');
+  var regNickname = document.getElementById('regNickname');
+  var authToggle = document.getElementById('authToggle');
+  var authToggleText = document.getElementById('authToggleText');
 
   if (!loginModal) return;
 
-  // 点击登录按钮 → 显示弹窗
+  // 当前模式：'login' | 'register'
+  var mode = 'login';
+
+  function setMode(m) {
+    mode = m;
+    if (authTitle) {
+      authTitle.textContent = m === 'login' ? '🔐 登录' : '📝 注册';
+    }
+    if (regNickname) {
+      regNickname.style.display = m === 'register' ? '' : 'none';
+    }
+    if (loginSubmit) {
+      loginSubmit.textContent = m === 'login' ? '登录' : '注册';
+    }
+    if (authToggleText) {
+      authToggleText.textContent = m === 'login' ? '没有账号？注册' : '已有账号？登录';
+    }
+    if (loginError) loginError.textContent = '';
+  }
+
+  // 点击登录按钮 → 显示弹窗（默认登录模式）
   if (loginBtn) {
     loginBtn.addEventListener('click', function() {
+      setMode('login');
       loginModal.style.display = 'flex';
       if (loginEmail) loginEmail.focus();
     });
@@ -144,7 +179,15 @@ function initLoginModal() {
     }
   });
 
-  // 提交登录
+  // 登录/注册切换
+  if (authToggle) {
+    authToggle.addEventListener('click', function(e) {
+      e.preventDefault();
+      setMode(mode === 'login' ? 'register' : 'login');
+    });
+  }
+
+  // 提交（登录或注册）
   if (loginSubmit) {
     loginSubmit.addEventListener('click', async function() {
       var email = loginEmail ? loginEmail.value.trim() : '';
@@ -156,33 +199,68 @@ function initLoginModal() {
       }
 
       loginSubmit.disabled = true;
-      loginSubmit.textContent = '登录中...';
+      loginSubmit.textContent = mode === 'login' ? '登录中...' : '注册中...';
       if (loginError) loginError.textContent = '';
 
       try {
-        await signIn(email, password);
-        loginModal.style.display = 'none';
-        if (loginEmail) loginEmail.value = '';
-        if (loginPassword) loginPassword.value = '';
+        if (mode === 'login') {
+          await signIn(email, password);
+          loginModal.style.display = 'none';
+          if (loginEmail) loginEmail.value = '';
+          if (loginPassword) loginPassword.value = '';
+          if (regNickname) regNickname.value = '';
+        } else {
+          var nickname = regNickname ? regNickname.value.trim() : '';
+          var result = await signUp(email, password, nickname);
+          // 检查是否需要邮箱验证
+          if (result.user && result.user.identities && result.user.identities.length === 0) {
+            // identities 为空表示用户已存在但未确认，或已注册
+            if (loginError) loginError.textContent = '该邮箱已注册，请直接登录';
+          } else if (result.session) {
+            // 邮箱验证已关闭，注册后直接登录
+            loginModal.style.display = 'none';
+            if (loginEmail) loginEmail.value = '';
+            if (loginPassword) loginPassword.value = '';
+            if (regNickname) regNickname.value = '';
+          } else {
+            // 需要邮箱验证
+            if (loginError) loginError.textContent = '注册成功！请检查邮箱并点击验证链接';
+            loginSubmit.disabled = false;
+            loginSubmit.textContent = '注册';
+            return; // 不要恢复按钮状态
+          }
+        }
       } catch (e) {
         if (loginError) {
-          if (e.message.includes('Invalid login credentials')) {
+          var msg = e.message || '';
+          if (msg.includes('Invalid login credentials')) {
             loginError.textContent = '邮箱或密码错误';
-          } else if (e.message.includes('Email not confirmed')) {
+          } else if (msg.includes('Email not confirmed')) {
             loginError.textContent = '邮箱未验证，请先验证邮箱';
+          } else if (msg.includes('User already registered')) {
+            loginError.textContent = '该邮箱已注册，请直接登录';
+          } else if (msg.includes('Password should be')) {
+            loginError.textContent = '密码长度至少6位';
           } else {
-            loginError.textContent = '登录失败：' + e.message;
+            loginError.textContent = (mode === 'login' ? '登录' : '注册') + '失败：' + msg;
           }
         }
       } finally {
         loginSubmit.disabled = false;
-        loginSubmit.textContent = '登录';
+        loginSubmit.textContent = mode === 'login' ? '登录' : '注册';
       }
     });
 
     // 回车键提交
     if (loginPassword) {
       loginPassword.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && loginSubmit && !loginSubmit.disabled) {
+          loginSubmit.click();
+        }
+      });
+    }
+    if (regNickname) {
+      regNickname.addEventListener('keydown', function(e) {
         if (e.key === 'Enter' && loginSubmit && !loginSubmit.disabled) {
           loginSubmit.click();
         }
@@ -226,6 +304,7 @@ if (document.readyState === 'loading') {
 // ============================================================
 window.SupabaseAuth = {
   signIn: signIn,
+  signUp: signUp,
   signOut: signOut,
   getUser: getUser,
   isLoggedIn: isLoggedIn,
