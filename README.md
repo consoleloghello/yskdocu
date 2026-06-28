@@ -31,9 +31,9 @@ python -m http.server 8899
 
 ## 部署到 GitHub Pages
 
-1. Push 到 GitHub 仓库的 `main` 分支
-2. 在仓库 Settings → Pages 中，选择 `main` 分支，根目录部署
-3. 部署前运行 `node scripts/gen_changelog.mjs` 更新公告数据
+Push 到 `main` 分支后，GitHub Actions 自动生成更新公告并部署。
+
+> **首次配置**：仓库 Settings → Pages → Source 选择 **GitHub Actions**（仅需一次）。
 
 ## 更新题库
 
@@ -48,10 +48,10 @@ python scripts/parse_docx.py
 
 ## 更新公告
 
-部署前生成最新的提交记录：
+push 后由 GitHub Actions 自动生成 `data/changelog.json`。本地预览可手动运行：
 
 ```bash
-node scripts/gen_changelog.mjs     # 输出 changelog.json，需提交到仓库
+node scripts/gen_changelog.mjs     # 输出 data/changelog.json，需提交到仓库
 ```
 
 ## 技术栈

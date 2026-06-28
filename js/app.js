@@ -481,7 +481,7 @@ function openReportModal(questionId) {
     if (e.target === modal) closeChangelog();
   });
 
-  fetch('changelog.json')
+  fetch('data/changelog.json')
     .then(function(r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();

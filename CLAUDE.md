@@ -26,7 +26,7 @@ python scripts/parse_docx.py      # 读取根目录下的 .docx，写入 data/*.
 # 在 Supabase Dashboard → SQL Editor 中执行 scripts/init_supabase.sql
 
 # 生成更新日志文件（部署前运行）
-node scripts/gen_changelog.mjs     # 读取最近3条 git commit，输出 changelog.json
+node scripts/gen_changelog.mjs     # 读取最近3条 git commit，输出 data/changelog.json
 ```
 
 无构建步骤、无测试套件、无代码检查工具。
