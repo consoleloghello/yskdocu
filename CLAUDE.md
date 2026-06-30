@@ -90,12 +90,13 @@ node scripts/gen_changelog.mjs     # 读取最近3条 git commit，输出 data/c
 
 ## docx 解析器 (`scripts/parse_docx.py`)
 
-- 使用 `python-docx` 提取段落纯文本（忽略样式 — 所有 docx 内容均为 Normal 样式）
-- 章节检测：根据 `KNOWN_CHAPTERS` 硬编码列表精确匹配。如果源 docx 新增章节，需要更新此列表
-- 题型检测：正则匹配 `一、…` 到 `五、…` 前缀
-- 答案提取：正则匹配 `（A）` / `（√）` / `（×）`
-- 简答题合并：启发式函数 `looks_like_new_question()` 判断是否为新题目，可能出错
-- 输出格式：`{ info: { title, version, total }, chapters: [{ name, type_groups: [{ type, questions: [{ question, options?, answer }] }] }] }`
+- 使用 `python-docx` 提取段落纯文本
+- **章节检测**：识别 `Heading 2` 样式 + `居中` 对齐的段落作为章节标题。不再依赖硬编码列表，docx 新增章节自动发现
+- **题型检测**：正则匹配 `一、…` 到 `五、…` 前缀（`extract_type_name()` 同时处理括号后缀如 `三、判断题（含答案，对打√、错打 ×）`）
+- **选项收集**：统一处理两种格式 — 外操版（同一行 `A. xxx B. xxx`）和内操版（每个选项独立一行）
+- **答案提取**：正则匹配 `（A）` / `（√）` / `（×）`
+- **简答题合并**：启发式函数 `looks_like_new_question()` 判断是否为新题目，可能出错
+- **输出格式**：`{ info: { title, version, total }, chapters: [{ name, type_groups: [{ type, questions: [{ question, options?, answer }] }] }] }`
 
 ## 关键约束
 

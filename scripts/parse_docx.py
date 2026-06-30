@@ -1,167 +1,208 @@
-"""Parse 公用工程题库 docx files into structured JSON."""
+"""Parse 公用工程题库 docx files into structured JSON.
+
+Chapters are identified by Heading 2 paragraphs (centered).
+Question types are identified by 一/二/三/... numbered headers.
+"""
 import re, json, os
 from docx import Document
-
-KNOWN_CHAPTERS = ['火炬', '给水加压泵站', '罐区', '锅炉', '空压站',
-                  '污水预处理', '循环水站', '制冷站', '制氮站', '新增题库']
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 
-def is_chapter_title(text):
-    if len(text) > 10 or not text:
+def is_chapter_heading(para):
+    """True if this paragraph is a chapter heading (Heading 2 + CENTER)."""
+    if not para.text.strip():
         return False
-    return text.strip() in KNOWN_CHAPTERS
+    style_ok = para.style and 'Heading 2' in para.style.name
+    align_ok = para.alignment == WD_ALIGN_PARAGRAPH.CENTER
+    return style_ok and align_ok
 
 
-def extract_question_type(text):
+def extract_type_name(text):
+    """Extract question type name from a numbered header like '一、选择题' -> '选择题'."""
     clean = re.sub(r'[（(].*?[）)]', '', text).strip()
     m = re.match(r'^[一二三四五六七八九十]、(.+)', clean)
     if not m:
         return None
     name = m.group(1)
-    if '选择' in name: return '选择题'
-    if '填空' in name: return '填空题'
-    if '判断' in name: return '判断题'
-    if '简答' in name: return '简答题'
-    if '实操' in name: return '实操分析题'
-    if '应急' in name: return '应急处理题'
+    if '选择' in name:
+        return '选择题'
+    if '填空' in name:
+        return '填空题'
+    if '判断' in name:
+        return '判断题'
+    if '简答' in name:
+        return '简答题'
+    if '实操' in name:
+        return '实操分析题'
+    if '应急' in name:
+        return '应急处理题'
     return name
 
 
-def is_question_type(text):
+def is_type_header(text):
+    """Check if text matches a numbered question-type header pattern."""
     return bool(re.match(r'^[一二三四五六七八九十]、', text))
 
 
 def parse_choice_answer(text):
+    """Extract answer letter from '...（A）' or '...（B）' pattern."""
     m = re.search(r'[（(]\s*([A-D])\s*[）)]', text)
     if m:
-        return m.group(1), re.sub(r'\s*[（(]\s*[A-D]\s*[）)].*', '', text, count=1).strip()
+        ans = m.group(1)
+        q = re.sub(r'\s*[（(]\s*[A-D]\s*[）)].*', '', text, count=1).strip()
+        return ans, q
     return '', text
 
 
-def parse_options(inline_text):
-    if re.search(r'A\s*[.、．）]\s', inline_text) and re.search(r'B\s*[.、．）]\s', inline_text):
-        parts = re.split(r'(?=[A-D]\s*[.、．）])', inline_text)
-        return [o.strip() for o in parts if o.strip() and len(o.strip()) > 1]
-    return [inline_text]
+def split_inline_options(text):
+    """Split 'A. xxx B. xxx C. xxx D. xxx' into option list."""
+    parts = re.split(r'(?=[A-D]\s*[.、．）])', text)
+    return [o.strip() for o in parts if o.strip() and len(o.strip()) > 1]
 
 
-def parse_judge_answer(text):
-    m = re.search(r'[（(]\s*([√×])\s*[）)]', text)
-    if m:
-        ans = '√' if m.group(1) == '√' else '×'
-        q = re.sub(r'\s*[（(]\s*[√×]\s*[）)]\s*(答案[：:]\s*[×√])?\s*$', '', text).strip()
-        q = re.sub(r'\s*[×√]$', '', q).strip()
-        return q, ans
-    return text, ''
+def collect_choice_options(texts, i):
+    """Gather consecutive A/B/C/D-prefixed paragraphs as options.
 
-
-def is_generic_continuation(text):
-    if not text: return True
-    if re.match(r'^[①②③④⑤⑥⑦⑧⑨⑩]', text): return True
-    if re.match(r'^[（(]?\s*[1-9]\d*\s*[）).、]', text): return True
-    if len(text) < 6: return True
-    if re.match(r'^[\-\•\*]', text): return True
-    return False
-
-
-def looks_like_new_question(text):
-    """Heuristic: does this paragraph start a new question (vs. continuing previous answer)?
-
-    Called only when in_answer mode — the main parse loop handles structural boundaries
-    (chapter titles, question type headers) outside of answer mode.
-    """
-    if not text: return False
-    if is_generic_continuation(text): return False
-    # Strong signals of a new question — question marks (but not if this is answer content)
-    if text.endswith('？') or text.endswith('?'):
-        return True
-    # Answer preamble lines: "答案：xxx" or "答：xxx" — definitely continuation
-    if re.match(r'^(答案|答|解析|说明|参考)', text):
-        return False
-    # Numbered markers that start a line — typically answer steps (1., (1), etc.)
-    if re.match(r'^\d+[.、)）]', text):
-        return False
-    # Longer text that doesn't start with answer-like keywords is more likely a new question
-    if len(text) >= 20 and not text.startswith(('答案', '答', '解析', '说明')):
-        return True
-    return False
-
-
-def collect_choice_options(raw, i):
-    """Collect consecutive A/B/C/D-prefixed paragraphs as choice options.
-
-    Returns (options_list, new_index) — new_index is the last consumed paragraph index.
+    Returns (list_of_options, last_index_consumed).
+    Handles both inline options (外操版) and per-line options (内操版).
     """
     opts = []
-    while i + 1 < len(raw) and re.match(r'[A-D]\s*[.、．）]', raw[i + 1]):
-        nxt = raw[i + 1]
-        # Check if multiple options exist on the same line (e.g. "A. xxx  B. xxx")
+    while i + 1 < len(texts) and re.match(r'[A-D]\s*[.、．）]', texts[i + 1]):
+        nxt = texts[i + 1]
         if re.search(r'[A-D]\s*[.、．）].*[A-D]\s*[.、．）]', nxt):
-            opts.extend(parse_options(nxt))
+            opts.extend(split_inline_options(nxt))
         else:
             opts.append(nxt)
         i += 1
     return opts, i
 
 
+def parse_judge_answer(text):
+    """Extract √/× answer from '...（√）' or '...（×）' pattern."""
+    m = re.search(r'[（(]\s*([√×])\s*[）)]', text)
+    if m:
+        ans = '√' if m.group(1) == '√' else '×'
+        q = re.sub(
+            r'\s*[（(]\s*[√×]\s*[）)]\s*(答案[：:]\s*[×√])?\s*$', '', text
+        ).strip()
+        q = re.sub(r'\s*[×√]$', '', q).strip()
+        return q, ans
+    return text, ''
+
+
+def is_listing_continuation(text):
+    """Is this text just a continuation marker (numbered item, bullet, very short)?"""
+    if not text:
+        return True
+    if re.match(r'^[①②③④⑤⑥⑦⑧⑨⑩]', text):
+        return True
+    if re.match(r'^[（(]?\s*[1-9]\d*\s*[）).、]', text):
+        return True
+    if len(text) < 6:
+        return True
+    if re.match(r'^[\-\•\*]', text):
+        return True
+    return False
+
+
+def looks_like_new_question(text):
+    """Heuristic: does this paragraph start a new open-ended question?"""
+    if not text:
+        return False
+    if is_listing_continuation(text):
+        return False
+    if text.endswith('？') or text.endswith('?'):
+        return True
+    if re.match(r'^(答案|答|解析|说明|参考)', text):
+        return False
+    if re.match(r'^\d+[.、)）]', text):
+        return False
+    if len(text) >= 20 and not text.startswith(('答案', '答', '解析', '说明')):
+        return True
+    return False
+
+
 def parse_docx(filepath):
     doc = Document(filepath)
-    raw = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
-    if not raw: return None
 
-    if '\n' in raw[0]:
-        parts = [p for p in raw[0].split('\n') if p.strip()]
-        raw[0] = parts[0]
-        for p in reversed(parts[1:]):
-            raw.insert(1, p)
+    # Build structured paragraph list: (text, paragraph_object)
+    paras = [(p.text.strip(), p) for p in doc.paragraphs if p.text.strip()]
+    if not paras:
+        return None
 
-    version = '外操版' if '外操版' in raw[0] else '内操版'
-    start = 1 if '公用工程题库' in raw[0] else 0
+    # Handle multi-line first paragraph (rare edge case)
+    text0, p0 = paras[0]
+    if '\n' in text0:
+        lines = [ln.strip() for ln in text0.split('\n') if ln.strip()]
+        paras[0] = (lines[0], p0)
+        for j, ln in enumerate(reversed(lines[1:]), 1):
+            paras.insert(j, (ln, p0))
+
+    # Detect version from first line
+    version = '外操版' if '外操版' in paras[0][0] else '内操版'
+
+    # Pre-extract text-only list for option collection
+    texts = [t for t, _ in paras]
 
     chapters = []
-    chapter = {'name': '火炬', 'type_groups': []}
+    chapter = None
     cur_type = None
     questions = []
     in_answer = False
 
+    start = 1 if '公用工程题库' in paras[0][0] else 0
+
     i = start
-    while i < len(raw):
-        text = raw[i]
+    while i < len(paras):
+        text, p = paras[i]
 
-        if '第二部分' in text:
-            i += 1
-            continue
-
-        if is_chapter_title(text):
-            if cur_type and questions:
-                chapter['type_groups'].append({'type': cur_type, 'questions': questions})
-            chapters.append(chapter)
+        # --- Chapter boundary: Heading 2 + CENTER ---
+        if is_chapter_heading(p):
+            if chapter:
+                if cur_type and questions:
+                    chapter['type_groups'].append(
+                        {'type': cur_type, 'questions': questions})
+                chapters.append(chapter)
             chapter = {'name': text, 'type_groups': []}
-            cur_type = None; questions = []; in_answer = False
+            cur_type = None
+            questions = []
+            in_answer = False
             i += 1
             continue
 
-        if is_question_type(text):
+        # Before first chapter — skip
+        if chapter is None:
+            i += 1
+            continue
+
+        # --- Question type header (一、选择题, 二、填空题, etc.) ---
+        if is_type_header(text):
             if cur_type and questions:
-                chapter['type_groups'].append({'type': cur_type, 'questions': questions})
-            cur_type = extract_question_type(text)
-            questions = []; in_answer = False
+                chapter['type_groups'].append(
+                    {'type': cur_type, 'questions': questions})
+            cur_type = extract_type_name(text)
+            questions = []
+            in_answer = False
             i += 1
             continue
 
+        # Before first type header in this chapter — skip
         if cur_type is None:
             i += 1
             continue
 
+        # --- Question body ---
         if cur_type == '选择题':
             if re.search(r'[（(]\s*[A-D]\s*[）)]', text):
                 ans, q = parse_choice_answer(text)
-                opts, i = collect_choice_options(raw, i)
-                questions.append({'question': q or text, 'options': opts, 'answer': ans})
-            elif i + 1 < len(raw) and re.match(r'[A-D]\s*[.、．）]', raw[i + 1]):
-                # 选择题 without inline answer marker: capture options from following lines
-                opts, i = collect_choice_options(raw, i)
-                questions.append({'question': text, 'options': opts, 'answer': ''})
+                opts, i = collect_choice_options(texts, i)
+                questions.append(
+                    {'question': q or text, 'options': opts, 'answer': ans})
+            elif i + 1 < len(paras) and re.match(
+                    r'[A-D]\s*[.、．）]', texts[i + 1]):
+                opts, i = collect_choice_options(texts, i)
+                questions.append(
+                    {'question': text, 'options': opts, 'answer': ''})
 
         elif cur_type == '判断题':
             q, ans = parse_judge_answer(text)
@@ -189,13 +230,28 @@ def parse_docx(filepath):
 
         i += 1
 
-    if cur_type and questions:
-        chapter['type_groups'].append({'type': cur_type, 'questions': questions})
-    chapters.append(chapter)
-    chapters = [c for c in chapters if any(g['questions'] for g in c['type_groups'])]
-    total = sum(len(g['questions']) for c in chapters for g in c['type_groups'])
-    return {'info': {'title': f'公用工程题库（{version}）', 'version': version, 'total': total},
-            'chapters': chapters}
+    # Finalize last chapter
+    if chapter:
+        if cur_type and questions:
+            chapter['type_groups'].append(
+                {'type': cur_type, 'questions': questions})
+        chapters.append(chapter)
+
+    # Remove empty chapters
+    chapters = [c for c in chapters
+                if any(g['questions'] for g in c['type_groups'])]
+
+    total = sum(len(g['questions'])
+                for c in chapters for g in c['type_groups'])
+    return {
+        'info': {
+            'title': f'公用工程题库（{version}）',
+            'version': version,
+            'total': total
+        },
+        'chapters': chapters
+    }
+
 
 if __name__ == '__main__':
     base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
