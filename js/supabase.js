@@ -19,6 +19,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 // ============================================================
 let supabase = null;
 let currentUser = null;
+let pendingEmail = '';       // 注册后等待验证的邮箱
 const authChangeCallbacks = [];
 
 try {
@@ -70,6 +71,29 @@ async function signOut() {
   if (!supabase) return;
   const { error } = await supabase.auth.signOut();
   if (error) throw error;
+}
+
+/** 发送邮箱验证码 OTP */
+async function sendOtp(email) {
+  if (!supabase) throw new Error('Supabase 未初始化');
+  const { data, error } = await supabase.auth.signInWithOtp({
+    email,
+    options: { shouldCreateUser: false }
+  });
+  if (error) throw error;
+  return data;
+}
+
+/** 验证邮箱 OTP Token（注册确认） */
+async function verifyOtpToken(email, token) {
+  if (!supabase) throw new Error('Supabase 未初始化');
+  const { data, error } = await supabase.auth.verifyOtp({
+    email,
+    token,
+    type: 'signup'
+  });
+  if (error) throw error;
+  return data;
 }
 
 /** 获取当前用户（null 表示未登录） */
@@ -154,20 +178,25 @@ function initLoginModal() {
     if (loginError) loginError.textContent = '';
   }
 
-  // 点击登录按钮 → 显示弹窗（默认登录模式）
+  // 点击登录按钮 → 显示弹窗（有待验证邮箱则恢复验证界面）
   if (loginBtn) {
     loginBtn.addEventListener('click', function() {
-      setMode('login');
+      if (pendingEmail) {
+        showVerifyUI();
+      } else {
+        setMode('login');
+      }
       loginModal.style.display = 'flex';
-      if (loginEmail) loginEmail.focus();
+      if (loginEmail && !pendingEmail) loginEmail.focus();
     });
   }
 
-  // 取消
+  // 取消 / 关闭 (处理验证状态的清理)
   if (loginCancel) {
     loginCancel.addEventListener('click', function() {
       loginModal.style.display = 'none';
       if (loginError) loginError.textContent = '';
+      if (verifyError) verifyError.textContent = '';
     });
   }
 
@@ -176,6 +205,7 @@ function initLoginModal() {
     if (e.target === loginModal) {
       loginModal.style.display = 'none';
       if (loginError) loginError.textContent = '';
+      if (verifyError) verifyError.textContent = '';
     }
   });
 
@@ -223,11 +253,12 @@ function initLoginModal() {
             if (loginPassword) loginPassword.value = '';
             if (regNickname) regNickname.value = '';
           } else {
-            // 需要邮箱验证
-            if (loginError) loginError.textContent = '注册成功！请检查邮箱并点击验证链接';
+            // 需要邮箱验证 → signUp 已发送确认邮件（含 Token），直接显示验证码输入区
+            pendingEmail = email;
+            showVerifyUI();
             loginSubmit.disabled = false;
             loginSubmit.textContent = '注册';
-            return; // 不要恢复按钮状态
+            return; // 保持弹窗打开，等待验证
           }
         }
       } catch (e) {
@@ -279,6 +310,120 @@ function initLoginModal() {
       }
     });
   }
+
+  // ============================================================
+  // 验证码 UI 切换
+  // ============================================================
+  var authFields = document.getElementById('authFields');
+  var verifySection = document.getElementById('verifySection');
+  var verifyToken = document.getElementById('verifyToken');
+  var verifyError = document.getElementById('verifyError');
+  var verifyHint = document.getElementById('verifyHint');
+  var verifySubmitBtn = document.getElementById('verifySubmitBtn');
+  var resendToken = document.getElementById('resendToken');
+  var verifyBack = document.getElementById('verifyBack');
+
+  function showVerifyUI() {
+    if (authFields) authFields.style.display = 'none';
+    if (verifySection) verifySection.style.display = '';
+    if (loginCancel) loginCancel.textContent = '关闭';
+    if (authTitle) authTitle.textContent = '📧 验证邮箱';
+    if (loginError) loginError.textContent = '';
+    if (verifyError) verifyError.textContent = '';
+    if (verifyToken) { verifyToken.value = ''; verifyToken.focus(); }
+    if (verifyHint) verifyHint.textContent = '验证码已发送至 ' + pendingEmail + '，请查收注册确认邮件并输入验证码';
+  }
+
+  function hideVerifyUI(keepPending) {
+    if (authFields) authFields.style.display = '';
+    if (verifySection) verifySection.style.display = 'none';
+    if (loginError) loginError.textContent = '';
+    if (verifyError) verifyError.textContent = '';
+    if (verifyToken) verifyToken.value = '';
+    if (loginCancel) loginCancel.textContent = '取消';
+    if (!keepPending) pendingEmail = '';
+  }
+
+  // 提交验证码
+  if (verifySubmitBtn) {
+    verifySubmitBtn.addEventListener('click', async function() {
+      var token = verifyToken ? verifyToken.value.trim() : '';
+      if (!token || token.length < 8) {
+        if (verifyError) verifyError.textContent = '请输入8位验证码';
+        return;
+      }
+      if (!pendingEmail) {
+        if (verifyError) verifyError.textContent = '验证信息已过期，请重新注册';
+        return;
+      }
+
+      verifySubmitBtn.disabled = true;
+      verifySubmitBtn.textContent = '验证中...';
+      if (verifyError) verifyError.textContent = '';
+
+      try {
+        await verifyOtpToken(pendingEmail, token);
+        // 验证成功 → 关闭弹窗
+        hideVerifyUI();
+        loginModal.style.display = 'none';
+        if (loginEmail) loginEmail.value = '';
+        if (loginPassword) loginPassword.value = '';
+        if (regNickname) regNickname.value = '';
+      } catch (e) {
+        if (verifyError) {
+          var msg = e.message || '';
+          if (msg.includes('Token has expired') || msg.includes('expired')) {
+            verifyError.textContent = '验证码已过期，请重新发送';
+          } else if (msg.includes('Invalid')) {
+            verifyError.textContent = '验证码错误，请检查后重试';
+          } else {
+            verifyError.textContent = '验证失败：' + msg;
+          }
+        }
+      } finally {
+        verifySubmitBtn.disabled = false;
+        verifySubmitBtn.textContent = '验证邮箱';
+      }
+    });
+
+    // 回车提交验证码
+    if (verifyToken) {
+      verifyToken.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && verifySubmitBtn && !verifySubmitBtn.disabled) {
+          verifySubmitBtn.click();
+        }
+      });
+    }
+  }
+
+  // 重新发送验证码
+  if (resendToken) {
+    resendToken.addEventListener('click', async function(e) {
+      e.preventDefault();
+      if (!pendingEmail) return;
+      resendToken.textContent = '发送中...';
+      resendToken.style.pointerEvents = 'none';
+      try {
+        await supabase.auth.resend({ type: 'signup', email: pendingEmail });
+        if (verifyHint) verifyHint.textContent = '验证码已重新发送至 ' + pendingEmail;
+        if (verifyError) verifyError.textContent = '';
+      } catch (otpErr) {
+        if (verifyError) verifyError.textContent = '发送失败：' + (otpErr.message || '请稍后重试');
+      } finally {
+        resendToken.textContent = '重新发送';
+        resendToken.style.pointerEvents = '';
+      }
+    });
+  }
+
+  // 返回登录（清除待验证状态）
+  if (verifyBack) {
+    verifyBack.addEventListener('click', function(e) {
+      e.preventDefault();
+      hideVerifyUI();
+      setMode('login');
+    });
+  }
 }
 
 // ============================================================
@@ -306,6 +451,8 @@ window.SupabaseAuth = {
   signIn: signIn,
   signUp: signUp,
   signOut: signOut,
+  sendOtp: sendOtp,
+  verifyOtpToken: verifyOtpToken,
   getUser: getUser,
   isLoggedIn: isLoggedIn,
   getClient: getClient,

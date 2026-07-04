@@ -105,12 +105,24 @@
   <div class="modal-content login-modal-content">
     <h2 id="authTitle">🔐 登录</h2>
     <div class="login-form">
-      <input id="loginEmail" type="email" placeholder="邮箱地址" autocomplete="email">
-      <input id="loginPassword" type="password" placeholder="密码" autocomplete="current-password">
-      <input id="regNickname" type="text" placeholder="昵称（选填）" autocomplete="name" style="display:none">
-      <p id="loginError" class="login-error"></p>
-      <button id="loginSubmit" class="login-submit-btn">登录</button>
-      <p class="auth-toggle-text"><a id="authToggle" href="#">没有账号？<span id="authToggleText">注册</span></a></p>
+      <!-- 登录/注册表单 -->
+      <div id="authFields">
+        <input id="loginEmail" type="email" placeholder="邮箱地址" autocomplete="email">
+        <input id="loginPassword" type="password" placeholder="密码" autocomplete="current-password">
+        <input id="regNickname" type="text" placeholder="昵称（选填）" autocomplete="name" style="display:none">
+        <p id="loginError" class="login-error"></p>
+        <button id="loginSubmit" class="login-submit-btn">登录</button>
+        <p class="auth-toggle-text"><a id="authToggle" href="#">没有账号？<span id="authToggleText">注册</span></a></p>
+      </div>
+      <!-- 邮箱验证码区域（注册后显示） -->
+      <div id="verifySection" style="display:none">
+        <p class="verify-hint" id="verifyHint">验证码已发送至您的邮箱，请查收邮件并输入8位验证码</p>
+        <input id="verifyToken" type="text" placeholder="输入8位验证码" maxlength="8" inputmode="numeric" autocomplete="one-time-code">
+        <p id="verifyError" class="login-error"></p>
+        <button id="verifySubmitBtn" class="login-submit-btn">验证邮箱</button>
+        <p class="verify-resend-text">未收到邮件？<a id="resendToken" href="#">重新发送</a></p>
+        <p class="verify-back-text"><a id="verifyBack" href="#">返回登录</a></p>
+      </div>
       <button id="loginCancel" class="login-cancel-btn">取消</button>
     </div>
   </div>
