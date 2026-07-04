@@ -6,6 +6,7 @@ let flatQs = [];
 let revealed = new Set();
 let state = { version:'外操版', chapter:'all', type:'all', searchQuery:'', mode:'browse', wrongBook:{}, stats:{} };
 let localNotes = {};  // 云端笔记缓存 { questionId: content }
+let reportedQuestions = {};  // 本次会话已反馈的题目 { questionId: true }
 
 const $ = id => document.getElementById(id);
 const qList = $('questionList');
@@ -282,6 +283,8 @@ function renderCards(qs){
     el.addEventListener('click', function(){
       const card = this.closest('.q-card');
       const id = card.dataset.id;
+      // 已揭示答案的卡片忽略再次点击，防止重复记录
+      if (revealed.has(id)) return;
       const letter = this.dataset.letter;
       const q = flatQs.find(x => x._id===id);
       if(!q) return;
@@ -369,31 +372,50 @@ function openNoteModal(questionId) {
   // 保存
   saveBtn.onclick = async function() {
     var content = textarea.value.trim();
-    if (!content) {
-      // 空内容视为删除
-      delete localNotes[questionId];
-      if (window.Sync && window.SupabaseAuth && window.SupabaseAuth.isLoggedIn()) {
-        await window.Sync.deleteNote(state.version, questionId);
+    saveBtn.disabled = true;
+    saveBtn.textContent = '保存中...';
+    if (deleteBtn) deleteBtn.disabled = true;
+    try {
+      if (!content) {
+        // 空内容视为删除
+        delete localNotes[questionId];
+        if (window.Sync && window.SupabaseAuth && window.SupabaseAuth.isLoggedIn()) {
+          await window.Sync.deleteNote(state.version, questionId);
+        }
+      } else {
+        localNotes[questionId] = content;
+        if (window.Sync && window.SupabaseAuth && window.SupabaseAuth.isLoggedIn()) {
+          await window.Sync.saveNote(state.version, questionId, content);
+        }
       }
-    } else {
-      localNotes[questionId] = content;
-      if (window.Sync && window.SupabaseAuth && window.SupabaseAuth.isLoggedIn()) {
-        await window.Sync.saveNote(state.version, questionId, content);
-      }
+      modal.style.display = 'none';
+      renderCards(_currentQs);  // 刷新笔记图标
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.textContent = '💾 保存';
+      if (deleteBtn) deleteBtn.disabled = false;
     }
-    modal.style.display = 'none';
-    renderCards(_currentQs);  // 刷新笔记图标
   };
 
   // 删除
   if (deleteBtn) {
     deleteBtn.onclick = async function() {
-      delete localNotes[questionId];
-      if (window.Sync && window.SupabaseAuth && window.SupabaseAuth.isLoggedIn()) {
-        await window.Sync.deleteNote(state.version, questionId);
+      saveBtn.disabled = true;
+      deleteBtn.disabled = true;
+      deleteBtn.textContent = '删除中...';
+      try {
+        delete localNotes[questionId];
+        if (window.Sync && window.SupabaseAuth && window.SupabaseAuth.isLoggedIn()) {
+          await window.Sync.deleteNote(state.version, questionId);
+        }
+        modal.style.display = 'none';
+        renderCards(_currentQs);
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = '💾 保存';
+        deleteBtn.disabled = false;
+        deleteBtn.textContent = '🗑 删除';
       }
-      modal.style.display = 'none';
-      renderCards(_currentQs);
     };
   }
 }
@@ -413,12 +435,21 @@ function openNoteModal(questionId) {
 function openReportModal(questionId) {
   var modal = $('reportModal');
   if (!modal) return;
+
+  // 本次会话已成功反馈过，不允许重复提交
+  if (reportedQuestions[questionId]) {
+    alert('该题目您已提交过反馈，感谢参与！');
+    return;
+  }
+
   modal.dataset.questionId = questionId;
   modal.style.display = 'flex';
   // 清除上次选择
   modal.querySelectorAll('input[name="reportReason"]').forEach(function(r) { r.checked = false; });
   $('reportDetail').value = '';
   $('reportMsg').textContent = '';
+  $('reportSubmit').disabled = false;
+  $('reportSubmit').textContent = '提交';
 }
 
 (function() {
@@ -449,12 +480,15 @@ function openReportModal(questionId) {
     var result = await window.Sync.submitReport(state.version, questionId, reasonEl.value, detail);
     if (result !== null) {
       msgEl.textContent = '✅ 反馈已提交，感谢！';
+      reportedQuestions[questionId] = true;
+      // 按钮保持禁用，防止重复提交
+      $('reportSubmit').textContent = '已提交';
       setTimeout(function() { modal.style.display = 'none'; }, 1500);
     } else {
       msgEl.textContent = '提交失败，请稍后重试';
+      $('reportSubmit').disabled = false;
+      $('reportSubmit').textContent = '提交';
     }
-    $('reportSubmit').disabled = false;
-    $('reportSubmit').textContent = '提交';
   });
 })();
 

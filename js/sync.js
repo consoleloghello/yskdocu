@@ -236,14 +236,14 @@ async function submitReport(version, questionId, reason, detail) {
   if (!c || !u) return null;
 
   return silent(
-    c.from('question_reports').insert({
+    c.from('question_reports').upsert({
       user_id: u,
       version: version,
       question_id: questionId,
       reason: reason,
       detail: detail || '',
       status: 'pending'
-    }),
+    }, { onConflict: 'user_id,version,question_id' }),
     'submitReport'
   );
 }
