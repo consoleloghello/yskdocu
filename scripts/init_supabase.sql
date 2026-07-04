@@ -204,13 +204,13 @@ GRANT ALL ON public.answer_history TO authenticated;
 GRANT ALL ON public.question_reports TO authenticated;
 GRANT ALL ON public.question_notes TO authenticated;
 
--- 允许 anon key 通过 RLS 访问（RLS 策略限制访问范围）
+-- anon key 仅授予 SELECT（所有写操作均需登录，RLS 策略限制访问范围）
 GRANT USAGE ON SCHEMA public TO anon;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.profiles TO anon;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.wrong_questions TO anon;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.answer_history TO anon;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.question_reports TO anon;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.question_notes TO anon;
+GRANT SELECT ON public.profiles TO anon;
+GRANT SELECT ON public.wrong_questions TO anon;
+GRANT SELECT ON public.answer_history TO anon;
+GRANT SELECT ON public.question_reports TO anon;
+GRANT SELECT ON public.question_notes TO anon;
 
 -- ============================================================
 -- 初始化完成

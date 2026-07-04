@@ -218,6 +218,9 @@ def parse_docx(filepath):
                 if questions:
                     sep = '\n' if questions[-1]['answer'] else ''
                     questions[-1]['answer'] += sep + text
+                else:
+                    # 首个段落就是答案文本，创建占位题目
+                    questions.append({'question': '', 'answer': text})
             elif in_answer and questions and questions[-1]['answer']:
                 if looks_like_new_question(text):
                     questions.append({'question': text, 'answer': ''})

@@ -52,10 +52,10 @@ async function loadData(ver){
     const wb = ls('ysk_wrong_' + ver);
     if(wb) state.wrongBook = wb;
     else state.wrongBook = {};
-    if(state.chapter!='all' && !data.chapters.find(c=>c.name===state.chapter)) state.chapter='all';
+    if(state.chapter!=='all' && !data.chapters.find(c=>c.name===state.chapter)) state.chapter='all';
     saveState();
     // 登录状态下拉取云端错题和笔记
-    pullCloudData(ver);
+    await pullCloudData(ver);
     render();
   } catch(e){
     $('welcomeStats').textContent='加载失败，请检查网络连接后刷新页面重试';
@@ -331,7 +331,7 @@ function logAnswer(q, isCorrect) {
   window.Sync.recordAnswer(state.version, id, q._chapter, q._type, isCorrect);
   if (!isCorrect) {
     window.Sync.addWrongQuestion(state.version, id, q._chapter, q._type);
-  } else {
+  } else if (state.wrongBook[id]) {
     window.Sync.removeWrongQuestion(state.version, id);
   }
 }
@@ -626,7 +626,16 @@ function renderStatsChart(cloudStats) {
   var correct = (cloudStats && cloudStats.correct) || 0;
   var wrong = (cloudStats && cloudStats.wrong) || 0;
   if (correct === 0 && wrong === 0) {
-    correct = 1; wrong = 0;  // 显示空白图表
+    // 无答题记录时显示占位提示
+    var ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.font = '13px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillStyle = '#94a3b8';
+      ctx.textAlign = 'center';
+      ctx.fillText('暂无答题记录', canvas.width / 2, canvas.height / 2);
+    }
+    return;
   }
 
   canvas._chart = new window.Chart(canvas, {

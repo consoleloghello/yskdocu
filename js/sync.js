@@ -119,6 +119,22 @@ async function recordAnswer(version, questionId, chapter, type, isCorrect) {
   );
 }
 
+/** 分页获取全部行，避免 Supabase 默认行数限制截断数据 */
+async function fetchAll(queryFn, label, batchSize) {
+  if (!batchSize) batchSize = 1000;
+  var all = [];
+  var from = 0;
+  var to = batchSize - 1;
+  var batch;
+  do {
+    batch = await silent(queryFn().range(from, to), label);
+    if (batch && batch.length) all = all.concat(batch);
+    from = to + 1;
+    to = from + batchSize - 1;
+  } while (batch && batch.length === batchSize);
+  return all;
+}
+
 /** 获取统计数据 */
 async function getStats(version) {
   var c = client();
@@ -126,35 +142,37 @@ async function getStats(version) {
   if (!c || !u) return null;
 
   // 总答题次数和正确率
-  var countResult = await silent(
-    c.from('answer_history')
-      .select('is_correct', { count: 'exact' })
-      .eq('user_id', u)
-      .eq('version', version),
+  var countResult = await fetchAll(
+    function() {
+      return c.from('answer_history')
+        .select('is_correct')
+        .eq('user_id', u)
+        .eq('version', version);
+    },
     'getStats.count'
   );
 
-  var total = countResult ? countResult.length : 0;
-  var correct = countResult ? countResult.filter(function(r) { return r.is_correct; }).length : 0;
+  var total = countResult.length;
+  var correct = countResult.filter(function(r) { return r.is_correct; }).length;
 
   // 各章节统计
-  var chapterResult = await silent(
-    c.from('answer_history')
-      .select('chapter,is_correct')
-      .eq('user_id', u)
-      .eq('version', version),
+  var chapterResult = await fetchAll(
+    function() {
+      return c.from('answer_history')
+        .select('chapter,is_correct')
+        .eq('user_id', u)
+        .eq('version', version);
+    },
     'getStats.chapters'
   );
 
   var byChapter = {};
-  if (chapterResult) {
-    chapterResult.forEach(function(r) {
-      if (!r.chapter) return;
-      if (!byChapter[r.chapter]) byChapter[r.chapter] = { total: 0, correct: 0 };
-      byChapter[r.chapter].total++;
-      if (r.is_correct) byChapter[r.chapter].correct++;
-    });
-  }
+  chapterResult.forEach(function(r) {
+    if (!r.chapter) return;
+    if (!byChapter[r.chapter]) byChapter[r.chapter] = { total: 0, correct: 0 };
+    byChapter[r.chapter].total++;
+    if (r.is_correct) byChapter[r.chapter].correct++;
+  });
 
   return {
     total: total,

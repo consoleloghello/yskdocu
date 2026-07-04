@@ -1,7 +1,7 @@
 /**
  * gen_changelog.mjs
  *
- * 读取最近 3 条 git commit 记录，生成 data/changelog.json 供前端展示更新公告。
+ * 读取最近 5 条 git commit 记录，生成 data/changelog.json 供前端展示更新公告。
  *
  * 用法：node scripts/gen_changelog.mjs
  * 输出：data/changelog.json
@@ -21,7 +21,7 @@ const outPath = resolve(root, 'data', 'changelog.json');
 // 执行 git log，用 || 作为字段分隔符（hash、日期、提交信息）
 let raw;
 try {
-  raw = execSync('git log -3 --format="%h||%ad||%s" --date=format:"%Y-%m-%d %H:%M"', {
+  raw = execSync('git log -5 --format="%h||%ad||%s" --date=format:"%Y-%m-%d %H:%M"', {
     cwd: root,
     encoding: 'utf-8'
   }).trim();

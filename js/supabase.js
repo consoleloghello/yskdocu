@@ -192,6 +192,16 @@ function initLoginModal() {
   }
 
   // 取消 / 关闭 (处理验证状态的清理)
+  // 以下变量供上方闭包及验证 UI 函数引用，提前声明
+  var authFields = document.getElementById('authFields');
+  var verifySection = document.getElementById('verifySection');
+  var verifyToken = document.getElementById('verifyToken');
+  var verifyError = document.getElementById('verifyError');
+  var verifyHint = document.getElementById('verifyHint');
+  var verifySubmitBtn = document.getElementById('verifySubmitBtn');
+  var resendToken = document.getElementById('resendToken');
+  var verifyBack = document.getElementById('verifyBack');
+
   if (loginCancel) {
     loginCancel.addEventListener('click', function() {
       loginModal.style.display = 'none';
@@ -310,18 +320,6 @@ function initLoginModal() {
       }
     });
   }
-
-  // ============================================================
-  // 验证码 UI 切换
-  // ============================================================
-  var authFields = document.getElementById('authFields');
-  var verifySection = document.getElementById('verifySection');
-  var verifyToken = document.getElementById('verifyToken');
-  var verifyError = document.getElementById('verifyError');
-  var verifyHint = document.getElementById('verifyHint');
-  var verifySubmitBtn = document.getElementById('verifySubmitBtn');
-  var resendToken = document.getElementById('resendToken');
-  var verifyBack = document.getElementById('verifyBack');
 
   function showVerifyUI() {
     if (authFields) authFields.style.display = 'none';
