@@ -1,23 +1,27 @@
 ﻿(function(){
 'use strict';
+let _deps = [];
+if (typeof window.State === 'undefined') _deps.push('state.js');
+if (typeof window.Render === 'undefined') _deps.push('renderer.js');
+if (_deps.length) throw new Error('Missing: ' + _deps.join(', '));
 
-var S = window.State;
-var R = window.Render;
-var qList = S.$('questionList');
- var $ = S.getEl;
-var state = S.get();
-var data = null;
-var flatQs = [];
-var revealed = S.getRevealed();
-var localNotes = S.getLocalNotes();
-var reportedQuestions = S.getReportedQuestions();
-var ls = function(k){ try{ return JSON.parse(localStorage.getItem(k)) }catch(e){} return null };
-var lss = function(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)) }catch(e){} };
-var loadState = S.load;
-var saveState = S.save;
- var esc = S.escapeHtml;
-var highlightText = S.highlightText;
-var renderStatsChart = R.renderStatsChart;
+const S = window.State;
+const R = window.Render;
+const qList = S.$('questionList');
+ const $ = S.getEl;
+const state = S.get();
+let data = null;
+let flatQs = [];
+let revealed = S.getRevealed();
+let localNotes = S.getLocalNotes();
+let reportedQuestions = S.getReportedQuestions();
+const ls = function(k){ try{ return JSON.parse(localStorage.getItem(k)) }catch(e){} return null };
+const lss = function(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)) }catch(e){} };
+const loadState = S.load;
+const saveState = S.save;
+ const esc = S.escapeHtml;
+const highlightText = S.highlightText;
+const renderStatsChart = R.renderStatsChart;
 
 async function loadData(ver){
   try {
@@ -58,13 +62,13 @@ async function pullCloudData(ver) {
   if (!window.Sync || !window.SupabaseAuth || !window.SupabaseAuth.isLoggedIn()) return;
   try {
     // 拉取云端错题
-    var cloudWrong = await window.Sync.getWrongQuestions(ver);
+    let cloudWrong = await window.Sync.getWrongQuestions(ver);
     if (cloudWrong && cloudWrong.length) {
       cloudWrong.forEach(function(id) { state.wrongBook[id] = true; });
       saveState();
     }
     // 拉取云端笔记
-    var notes = await window.Sync.getNotes(ver);
+    let notes = await window.Sync.getNotes(ver);
     if (notes) {
       for(var k in notes) localNotes[k] = notes[k];
     }
@@ -261,7 +265,7 @@ function renderCards(qs){
 /** 云端记录答题结果（仅登录用户） */
 function logAnswer(q, isCorrect) {
   if (!window.Sync || !window.SupabaseAuth || !window.SupabaseAuth.isLoggedIn()) return;
-  var id = q._id;
+  let id = q._id;
   window.Sync.recordAnswer(state.version, id, q._chapter, q._type, isCorrect);
   if (!isCorrect) {
     window.Sync.addWrongQuestion(state.version, id, q._chapter, q._type);
@@ -290,10 +294,10 @@ function updateStats(){
 // 笔记弹窗
 // ============================================================
 function openNoteModal(questionId) {
-  var modal = $('noteModal');
-  var textarea = $('noteTextarea');
-  var saveBtn = $('noteSaveBtn');
-  var deleteBtn = $('noteDeleteBtn');
+  let modal = $('noteModal');
+  let textarea = $('noteTextarea');
+  let saveBtn = $('noteSaveBtn');
+  let deleteBtn = $('noteDeleteBtn');
   if (!modal || !textarea) return;
 
   // 填充已有内容
@@ -303,7 +307,7 @@ function openNoteModal(questionId) {
 
   // 保存
   saveBtn.onclick = async function() {
-    var content = textarea.value.trim();
+    let content = textarea.value.trim();
     saveBtn.disabled = true;
     saveBtn.textContent = '保存中...';
     if (deleteBtn) deleteBtn.disabled = true;
@@ -354,7 +358,7 @@ function openNoteModal(questionId) {
 
 // 关闭笔记弹窗
 (function() {
-  var modal = $('noteModal');
+  let modal = $('noteModal');
   if (!modal) return;
   $('noteClose').addEventListener('click', function() { modal.style.display = 'none'; });
   $('noteCancel').addEventListener('click', function() { modal.style.display = 'none'; });
@@ -365,7 +369,7 @@ function openNoteModal(questionId) {
 // 报错弹窗
 // ============================================================
 function openReportModal(questionId) {
-  var modal = $('reportModal');
+  let modal = $('reportModal');
   if (!modal) return;
 
   // 本次会话已成功反馈过，不允许重复提交
@@ -385,17 +389,17 @@ function openReportModal(questionId) {
 }
 
 (function() {
-  var modal = $('reportModal');
+  let modal = $('reportModal');
   if (!modal) return;
   $('reportClose').addEventListener('click', function() { modal.style.display = 'none'; });
   $('reportCancel').addEventListener('click', function() { modal.style.display = 'none'; });
   modal.addEventListener('click', function(e) { if (e.target === modal) modal.style.display = 'none'; });
 
   $('reportSubmit').addEventListener('click', async function() {
-    var questionId = modal.dataset.questionId;
-    var reasonEl = modal.querySelector('input[name="reportReason"]:checked');
-    var detail = $('reportDetail').value.trim();
-    var msgEl = $('reportMsg');
+    let questionId = modal.dataset.questionId;
+    let reasonEl = modal.querySelector('input[name="reportReason"]:checked');
+    let detail = $('reportDetail').value.trim();
+    let msgEl = $('reportMsg');
 
     if (!reasonEl) {
       msgEl.textContent = '请选择报错原因';
@@ -409,7 +413,7 @@ function openReportModal(questionId) {
     $('reportSubmit').disabled = true;
     $('reportSubmit').textContent = '提交中...';
 
-    var result = await window.Sync.submitReport(state.version, questionId, reasonEl.value, detail);
+    let result = await window.Sync.submitReport(state.version, questionId, reasonEl.value, detail);
     if (result !== null) {
       msgEl.textContent = '✅ 反馈已提交，感谢！';
       reportedQuestions[questionId] = true;
@@ -428,12 +432,12 @@ function openReportModal(questionId) {
 // Changelog Modal
 // ============================================================
 (function() {
-  var modal = $('changelogModal');
-  var closeBtn = $('changelogClose');
-  var body = $('changelogBody');
+  let modal = $('changelogModal');
+  let closeBtn = $('changelogClose');
+  let body = $('changelogBody');
   if (!modal || !closeBtn || !body) return;
 
-  var pendingHash = null;
+  let pendingHash = null;
 
   function closeChangelog() {
     modal.style.display = 'none';
@@ -453,12 +457,12 @@ function openReportModal(questionId) {
       return r.json();
     })
     .then(function(data) {
-      var commits = data && data.commits;
+      let commits = data && data.commits;
       if (!commits || !commits.length) return;
 
-      var html = '';
+      let html = '';
       for (var i = 0; i < commits.length; i++) {
-        var c = commits[i];
+        let c = commits[i];
         html += '<div class="changelog-entry">'
           + '<div class="changelog-date">' + esc(c.date) + '</div>'
           + '<div class="changelog-msg">' + esc(c.message) + '</div>'
@@ -466,8 +470,8 @@ function openReportModal(questionId) {
       }
       body.innerHTML = html;
 
-      var latestHash = commits[0].hash;
-      var seen = null;
+      let latestHash = commits[0].hash;
+      let seen = null;
       try { seen = localStorage.getItem('ysk_changelog_seen'); } catch(e) {}
       if (seen !== latestHash) {
         pendingHash = latestHash;
@@ -482,10 +486,10 @@ function openReportModal(questionId) {
 // ============================================================
 // Search
 // ============================================================
-var _isComposing = false;
+let _isComposing = false;
 $('searchInput').addEventListener('compositionstart', function(){ _isComposing = true; });
 $('searchInput').addEventListener('compositionend', function(){ _isComposing = false; doSearch(); });
-var doSearch = S.debounce(function(){
+const doSearch = S.debounce(function(){
   const v = $('searchInput').value.trim();
   $('searchClear').style.display = v ? 'inline' : 'none';
   state.searchQuery = v;
@@ -512,7 +516,7 @@ $('statsBtn').addEventListener('click', async function(){
   const wrong = Object.keys(state.wrongBook).length;
   const isLoggedIn = window.SupabaseAuth && window.SupabaseAuth.isLoggedIn();
 
-  var statsHtml = `
+  let statsHtml = `
     <div class="stat-row"><span class="stat-label">题库版本</span><span class="stat-value">${state.version}</span></div>
     <div class="stat-row"><span class="stat-label">总题数</span><span class="stat-value">${total}</span></div>
     <div class="stat-row"><span class="stat-label">章节数</span><span class="stat-value">${data.chapters.length}</span></div>
@@ -522,7 +526,7 @@ $('statsBtn').addEventListener('click', async function(){
 
   // 登录用户：显示云端统计和图表
   if (isLoggedIn && window.Sync) {
-    var cloudStats = await window.Sync.getStats(state.version);
+    let cloudStats = await window.Sync.getStats(state.version);
     if (cloudStats && cloudStats.total > 0) {
       statsHtml += `<div class="stat-divider"></div>
         <div class="stat-row"><span class="stat-label">📊 云端答题总数</span><span class="stat-value">${cloudStats.total}</span></div>
@@ -550,48 +554,6 @@ $('statsBtn').addEventListener('click', async function(){
 $('statsClose').addEventListener('click', ()=>{ $('statsModal').style.display='none'; });
 $('statsModal').addEventListener('click', e=>{ if(e.target===e.currentTarget) e.currentTarget.style.display='none'; });
 
-/** 渲染统计饼图（正确/错误比例） */
-function renderStatsChart(cloudStats) {
-  if (typeof window.Chart === 'undefined') return;
-  var canvas = document.getElementById('statsPieChart');
-  if (!canvas) return;
-
-  // 销毁旧图表
-  if (canvas._chart) canvas._chart.destroy();
-
-  var correct = (cloudStats && cloudStats.correct) || 0;
-  var wrong = (cloudStats && cloudStats.wrong) || 0;
-  if (correct === 0 && wrong === 0) {
-    // 无答题记录时显示占位提示
-    var ctx = canvas.getContext('2d');
-    if (ctx) {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.font = '13px -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillStyle = '#94a3b8';
-      ctx.textAlign = 'center';
-      ctx.fillText('暂无答题记录', canvas.width / 2, canvas.height / 2);
-    }
-    return;
-  }
-
-  canvas._chart = new window.Chart(canvas, {
-    type: 'doughnut',
-    data: {
-      labels: ['正确', '错误'],
-      datasets: [{
-        data: [correct, wrong],
-        backgroundColor: ['#22c55e', '#ef4444'],
-        borderWidth: 0
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: { position: 'bottom', labels: { font: { size: 12 }, padding: 16 } }
-      }
-    }
-  });
-}
 
 // Top action buttons
 $('wrongBookBtn').addEventListener('click', ()=>{
@@ -678,12 +640,12 @@ $('verNei').addEventListener('click', function(){ switchVersion('内操版'); })
 // ============================================================
 qList.addEventListener('click', function(e) {
   // 显示/隐藏答案按钮
-  var btn = e.target.closest('.q-show-answer-btn');
+  let btn = e.target.closest('.q-show-answer-btn');
   if (btn) {
     e.stopPropagation();
-    var id = btn.dataset.id;
-    var card = btn.closest('.q-card');
-    var answerDiv = card.querySelector('.q-answer');
+    let id = btn.dataset.id;
+    let card = btn.closest('.q-card');
+    let answerDiv = card.querySelector('.q-answer');
     if (revealed.has(id)) {
       revealed.delete(id);
       answerDiv.classList.remove('visible');
@@ -699,18 +661,18 @@ qList.addEventListener('click', function(e) {
   }
 
   // 选择题选项点击
-  var opt = e.target.closest('.opt-row');
+  let opt = e.target.closest('.opt-row');
   if (opt) {
-    var card = opt.closest('.q-card');
-    var id = card.dataset.id;
+    let card = opt.closest('.q-card');
+    let id = card.dataset.id;
     if (revealed.has(id)) return;
-    var letter = opt.dataset.letter;
-    var q = flatQs.find(function(x) { return x._id === id; });
+    let letter = opt.dataset.letter;
+    let q = flatQs.find(function(x) { return x._id === id; });
     if (!q) return;
-    var hasAnswer = q.answer && q.answer.trim() !== '';
-    var correct = hasAnswer && q.answer.toUpperCase() === letter;
+    let hasAnswer = q.answer && q.answer.trim() !== '';
+    let correct = hasAnswer && q.answer.toUpperCase() === letter;
     card.querySelectorAll('.opt-row').forEach(function(o) {
-      var l = o.dataset.letter;
+      let l = o.dataset.letter;
       if (hasAnswer && l === q.answer) o.classList.add('revealed');
       else if (o === opt && !correct) o.classList.add('wrong');
     });
@@ -727,7 +689,7 @@ qList.addEventListener('click', function(e) {
   }
 
   // 笔记按钮
-  var noteBtn = e.target.closest('.q-note-btn');
+  let noteBtn = e.target.closest('.q-note-btn');
   if (noteBtn) {
     e.stopPropagation();
     openNoteModal(noteBtn.dataset.id);
@@ -735,7 +697,7 @@ qList.addEventListener('click', function(e) {
   }
 
   // 报错按钮
-  var reportBtn = e.target.closest('.q-report-btn');
+  let reportBtn = e.target.closest('.q-report-btn');
   if (reportBtn) {
     e.stopPropagation();
     openReportModal(reportBtn.dataset.id);
@@ -748,4 +710,6 @@ loadState();
 // 启动认证状态监听
 initAuthSync();
 })();
+
+
 
