@@ -1,43 +1,29 @@
-(function(){
+﻿(function(){
 'use strict';
 
-let data = null;
-let flatQs = [];
-let revealed = new Set();
-let state = { version:'外操版', chapter:'all', type:'all', searchQuery:'', mode:'browse', wrongBook:{}, stats:{} };
-let localNotes = {};  // 云端笔记缓存 { questionId: content }
-let reportedQuestions = {};  // 本次会话已反馈的题目 { questionId: true }
-
-const $ = id => document.getElementById(id);
-const qList = $('questionList');
-
-function ls(key){ try{ return JSON.parse(localStorage.getItem(key)) }catch(e){} return null }
-function lss(key,v){ try{ localStorage.setItem(key, JSON.stringify(v)) }catch(e){} }
-
-function loadState(){
-  const s = ls('ysk_state');
-  if(s) Object.assign(state, s);
-  const wb = ls('ysk_wrong_' + state.version);
-  if(wb) {
-    state.wrongBook = wb;
-  } else if (!state.wrongBook || Object.keys(state.wrongBook).length === 0) {
-    state.wrongBook = {};
-  }
-  const r = ls('ysk_revealed');
-  if(r) revealed = new Set(r);
-}
-function saveState(){
-  const {wrongBook, ...rest} = state;
-  lss('ysk_state', rest);
-  lss('ysk_wrong_' + state.version, wrongBook);
-  lss('ysk_revealed', [...revealed]);
-}
+var S = window.State;
+var R = window.Render;
+var qList = S.$('questionList');
+ var $ = S.getEl;
+var state = S.get();
+var data = null;
+var flatQs = [];
+var revealed = S.getRevealed();
+var localNotes = S.getLocalNotes();
+var reportedQuestions = S.getReportedQuestions();
+var ls = function(k){ try{ return JSON.parse(localStorage.getItem(k)) }catch(e){} return null };
+var lss = function(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)) }catch(e){} };
+var loadState = S.load;
+var saveState = S.save;
+ var esc = S.escapeHtml;
+var highlightText = S.highlightText;
+var renderStatsChart = R.renderStatsChart;
 
 async function loadData(ver){
   try {
     const r = await fetch('data/'+ver+'.json');
     if(!r.ok) throw new Error('HTTP '+r.status);
-    data = await r.json();
+    data = await r.json(); S.data = data;
     buildFlat();
     revealed.clear();
     flatQs.forEach(q => revealed.add(q._id));
@@ -79,7 +65,9 @@ async function pullCloudData(ver) {
     }
     // 拉取云端笔记
     var notes = await window.Sync.getNotes(ver);
-    if (notes) localNotes = notes;
+    if (notes) {
+      for(var k in notes) localNotes[k] = notes[k];
+    }
   } catch(e) {
     console.error('pullCloudData error:', e);
   }
@@ -95,8 +83,8 @@ function initAuthSync() {
       pullCloudData(state.version).then(function() { render(); });
     } else {
       // 登出：清除笔记缓存，保留本地错题
-      localNotes = {};
-      render();
+      for(var k in localNotes) delete localNotes[k];
+      R.render();
     }
   });
 
@@ -108,7 +96,7 @@ function initAuthSync() {
 
 function buildFlat(){
   flatQs = []; let qid=0;
-  data.chapters.forEach(ch => {
+  S.data.chapters.forEach(function(ch){
     ch.type_groups.forEach(tg => {
       tg.questions.forEach(q => {
         q._id = ch.name+'_'+tg.type+'_'+(qid++);
@@ -118,6 +106,7 @@ function buildFlat(){
       });
     });
   });
+  S.flatQs = flatQs;
 }
 
 function getCurrentQs(){
@@ -290,25 +279,6 @@ function updateTopActions(){
   $('hideAllBtn').style.display = shown > 0 ? 'inline-block' : 'none';
 }
 
-var _escNode;
-function esc(t){ if(!t) return ''; if(!_escNode) _escNode = document.createElement('div'); _escNode.textContent=t; return _escNode.innerHTML; }
-
-function escapeRegex(str) {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function highlightText(text, query) {
-  if (!query) return esc(text);
-  var escapedQuery = escapeRegex(query);
-  var regex = new RegExp('(' + escapedQuery + ')', 'gi');
-  var parts = String(text).split(regex);
-  return parts.map(function(part) {
-    if (part.toLowerCase() === query.toLowerCase()) {
-      return '<mark>' + esc(part) + '</mark>';
-    }
-    return esc(part);
-  }).join('');
-}
 
 function updateStats(){
   if(!data) return;
@@ -512,7 +482,10 @@ function openReportModal(questionId) {
 // ============================================================
 // Search
 // ============================================================
-$('searchInput').addEventListener('input', ()=>{
+var _isComposing = false;
+$('searchInput').addEventListener('compositionstart', function(){ _isComposing = true; });
+$('searchInput').addEventListener('compositionend', function(){ _isComposing = false; doSearch(); });
+var doSearch = S.debounce(function(){
   const v = $('searchInput').value.trim();
   $('searchClear').style.display = v ? 'inline' : 'none';
   state.searchQuery = v;
@@ -520,7 +493,8 @@ $('searchInput').addEventListener('input', ()=>{
   if(v) state.chapter = 'all';
   state.type = 'all';
   saveState(); render();
-});
+}, 300);
+$('searchInput').addEventListener('input', function(){ if(!_isComposing) doSearch(); });
 $('searchClear').addEventListener('click', ()=>{
   $('searchInput').value = '';
   $('searchClear').style.display = 'none';
@@ -774,3 +748,4 @@ loadState();
 // 启动认证状态监听
 initAuthSync();
 })();
+

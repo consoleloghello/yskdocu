@@ -111,7 +111,7 @@ def looks_like_new_question(text):
         return False
     if is_listing_continuation(text):
         return False
-    if text.endswith('？') or text.endswith('?'):
+    if text.endswith('？') or text.endswith('?') or text.endswith('。'):
         return True
     if re.match(r'^(答案|答|解析|说明|参考)', text):
         return False
