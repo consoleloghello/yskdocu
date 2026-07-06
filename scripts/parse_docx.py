@@ -210,7 +210,17 @@ def parse_docx(filepath):
                 questions.append({'question': q, 'answer': ans})
 
         elif cur_type == '填空题':
-            questions.append({'question': text, 'answer': text})
+            # 提取答案：优先加粗，其次下划线，再次括号内容
+            # 同时将提取位置替换为 ____
+            new_q, ans = _extract_answers_from_runs(p, 'bold')
+            if not ans:
+                new_q, ans = _extract_answers_from_runs(p, 'underline')
+            if not ans:
+                m = re.search(r'[（(][^）)]+[）)]', text)
+                if m:
+                    ans = m.group(0).strip('（）()')
+                    new_q = text
+            questions.append({'question': new_q or text, 'answer': ans})
 
         elif cur_type in ('简答题', '实操分析题', '应急处理题'):
             if text.startswith('答案') or text.startswith('答'):
@@ -254,6 +264,33 @@ def parse_docx(filepath):
         },
         'chapters': chapters
     }
+
+
+def _extract_answers_from_runs(para, fmt_attr):
+    """Extract answer from formatted runs, returns (new_question, answer).
+
+    Formatted run text is replaced with ____ in the question.
+    Multiple non-consecutive formatted runs are separated by 、 in the answer.
+    """
+    q_parts = []
+    a_parts = []
+    in_fmt = False
+    needs_sep = False
+    for run in para.runs:
+        if getattr(run.font, fmt_attr):
+            if not in_fmt:
+                q_parts.append('____')
+            if needs_sep:
+                a_parts.append('、')
+                needs_sep = False
+            a_parts.append(run.text)
+            in_fmt = True
+        else:
+            if in_fmt:
+                in_fmt = False
+                needs_sep = True
+            q_parts.append(run.text)
+    return ''.join(q_parts), ''.join(a_parts)
 
 
 if __name__ == '__main__':

@@ -231,7 +231,7 @@ function renderCards(qs){
         <span class="q-type-badge">${q._type}</span>
         <span class="q-chapter-label">${q._chapter} · #${idx+1}</span>
       </div>
-      <div class="q-text">${esc(q.question)}</div>`;
+      <div class="q-text">${highlightText(q.question, state.searchQuery)}</div>`;
     // Options for 选择题
     if(q.options && q.options.length>0){
       h += `<div class="q-options">`;
@@ -241,7 +241,7 @@ function renderCards(qs){
         let cls = 'opt-row';
         if(isRevealed && correct) cls += ' revealed';
         if(isRevealed && !correct && isWrong) cls += ' wrong';
-        h += `<div class="${cls}" data-letter="${letter}">${esc(opt)}</div>`;
+        h += `<div class="${cls}" data-letter="${letter}">${highlightText(opt, state.searchQuery)}</div>`;
       });
       h += `</div>`;
     }
@@ -252,7 +252,7 @@ function renderCards(qs){
     else if(q._type==='选择题') ansHtml = q.answer ? '正确答案：'+q.answer : '⚠ 答案未标注';
     else ansHtml = q.answer || '⚠ 答案未解析';
     const showAns = isDirect || isRevealed;
-    h += `<div class="q-answer ${showAns?'visible':''}"><div class="label">📝 参考答案</div>${esc(ansHtml)}</div>`;
+    h += `<div class="q-answer ${showAns?'visible':''}"><div class="label">📝 参考答案</div>${highlightText(ansHtml, state.searchQuery)}</div>`;
     if(!isDirect){
       h += `<button class="q-show-answer-btn" data-id="${q._id}">${isRevealed?'隐藏答案':'显示答案'}</button>`;
     }
@@ -267,61 +267,6 @@ function renderCards(qs){
   });
   qList.innerHTML = h;
   updateTopActions();
-  // Event: show/hide answer
-  qList.querySelectorAll('.q-show-answer-btn').forEach(btn => {
-    btn.addEventListener('click', function(e){
-      e.stopPropagation();
-      const id = this.dataset.id;
-      if(revealed.has(id)) revealed.delete(id);
-      else revealed.add(id);
-      saveState();
-      renderCards(qs);
-    });
-  });
-  // Event: opt click (选择题)
-  qList.querySelectorAll('.opt-row').forEach(el => {
-    el.addEventListener('click', function(){
-      const card = this.closest('.q-card');
-      const id = card.dataset.id;
-      // 已揭示答案的卡片忽略再次点击，防止重复记录
-      if (revealed.has(id)) return;
-      const letter = this.dataset.letter;
-      const q = flatQs.find(x => x._id===id);
-      if(!q) return;
-      const hasAnswer = q.answer && q.answer.trim() !== '';
-      const correct = hasAnswer && q.answer.toUpperCase()===letter;
-      // Highlight
-      card.querySelectorAll('.opt-row').forEach(o => {
-        const l = o.dataset.letter;
-        if(hasAnswer && l === q.answer) o.classList.add('revealed');
-        else if(o===this && !correct) o.classList.add('wrong');
-      });
-      card.querySelector('.q-answer').classList.add('visible');
-      revealed.add(id);
-      if(hasAnswer){
-        if(!correct) state.wrongBook[id] = true;
-        else delete state.wrongBook[id];
-      }
-      saveState();
-      updateTopActions();
-      // 云端同步：记录答题 + 更新错题
-      logAnswer(q, correct);
-    });
-  });
-  // Event: 笔记按钮
-  qList.querySelectorAll('.q-note-btn').forEach(btn => {
-    btn.addEventListener('click', function(e){
-      e.stopPropagation();
-      openNoteModal(this.dataset.id);
-    });
-  });
-  // Event: 报错按钮
-  qList.querySelectorAll('.q-report-btn').forEach(btn => {
-    btn.addEventListener('click', function(e){
-      e.stopPropagation();
-      openReportModal(this.dataset.id);
-    });
-  });
 }
 
 /** 云端记录答题结果（仅登录用户） */
@@ -347,6 +292,23 @@ function updateTopActions(){
 
 var _escNode;
 function esc(t){ if(!t) return ''; if(!_escNode) _escNode = document.createElement('div'); _escNode.textContent=t; return _escNode.innerHTML; }
+
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function highlightText(text, query) {
+  if (!query) return esc(text);
+  var escapedQuery = escapeRegex(query);
+  var regex = new RegExp('(' + escapedQuery + ')', 'gi');
+  var parts = String(text).split(regex);
+  return parts.map(function(part) {
+    if (part.toLowerCase() === query.toLowerCase()) {
+      return '<mark>' + esc(part) + '</mark>';
+    }
+    return esc(part);
+  }).join('');
+}
 
 function updateStats(){
   if(!data) return;
@@ -736,6 +698,76 @@ $('verNei').addEventListener('click', function(){ switchVersion('内操版'); })
     });
   });
 })();
+
+// ============================================================
+// 事件委托：卡片内交互（避免全量重渲染）
+// ============================================================
+qList.addEventListener('click', function(e) {
+  // 显示/隐藏答案按钮
+  var btn = e.target.closest('.q-show-answer-btn');
+  if (btn) {
+    e.stopPropagation();
+    var id = btn.dataset.id;
+    var card = btn.closest('.q-card');
+    var answerDiv = card.querySelector('.q-answer');
+    if (revealed.has(id)) {
+      revealed.delete(id);
+      answerDiv.classList.remove('visible');
+      btn.textContent = '显示答案';
+    } else {
+      revealed.add(id);
+      answerDiv.classList.add('visible');
+      btn.textContent = '隐藏答案';
+    }
+    saveState();
+    updateTopActions();
+    return;
+  }
+
+  // 选择题选项点击
+  var opt = e.target.closest('.opt-row');
+  if (opt) {
+    var card = opt.closest('.q-card');
+    var id = card.dataset.id;
+    if (revealed.has(id)) return;
+    var letter = opt.dataset.letter;
+    var q = flatQs.find(function(x) { return x._id === id; });
+    if (!q) return;
+    var hasAnswer = q.answer && q.answer.trim() !== '';
+    var correct = hasAnswer && q.answer.toUpperCase() === letter;
+    card.querySelectorAll('.opt-row').forEach(function(o) {
+      var l = o.dataset.letter;
+      if (hasAnswer && l === q.answer) o.classList.add('revealed');
+      else if (o === opt && !correct) o.classList.add('wrong');
+    });
+    card.querySelector('.q-answer').classList.add('visible');
+    revealed.add(id);
+    if (hasAnswer) {
+      if (!correct) state.wrongBook[id] = true;
+      else delete state.wrongBook[id];
+    }
+    saveState();
+    updateTopActions();
+    logAnswer(q, correct);
+    return;
+  }
+
+  // 笔记按钮
+  var noteBtn = e.target.closest('.q-note-btn');
+  if (noteBtn) {
+    e.stopPropagation();
+    openNoteModal(noteBtn.dataset.id);
+    return;
+  }
+
+  // 报错按钮
+  var reportBtn = e.target.closest('.q-report-btn');
+  if (reportBtn) {
+    e.stopPropagation();
+    openReportModal(reportBtn.dataset.id);
+    return;
+  }
+});
 
 // Init
 loadState();
