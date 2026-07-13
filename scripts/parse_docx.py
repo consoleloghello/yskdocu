@@ -49,7 +49,7 @@ def parse_choice_answer(text):
     m = re.search(r'[（(]\s*([A-D])\s*[）)]', text)
     if m:
         ans = m.group(1)
-        q = re.sub(r'\s*[（(]\s*[A-D]\s*[）)].*', '', text, count=1).strip()
+        q = re.sub(r'\s*[（(]\s*[A-D]\s*[）)]', '（  ）', text, count=1).strip()
         return ans, q
     return '', text
 
