@@ -1,0 +1,26 @@
+﻿{
+  "env": {
+    "browser": true,
+    "es2021": true
+  },
+  "globals": {
+    "supabase": "readonly",
+    "Chart": "readonly", "State": "readonly", "Render": "readonly", "SupabaseAuth": "readonly", "Sync": "readonly"
+  },
+  "parserOptions": {
+    "ecmaVersion": "latest",
+    "sourceType": "script"
+  },
+  "rules": {
+    "no-var": "warn",
+    "prefer-const": "warn",
+    "quotes": ["warn", "single", { "avoidEscape": true }],
+    "semi": ["warn", "always"],
+    "no-unused-vars": ["warn", { "vars": "local", "args": "none" }],
+    "no-undef": ["error", { "typeof": true }],
+    "no-empty": "warn",
+    "eqeqeq": "warn",
+    "curly": "warn"
+  }
+}
+
