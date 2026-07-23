@@ -126,6 +126,34 @@ node scripts/gen_changelog.mjs     # 读取最近3条 git commit，输出 data/c
 | `ysk_wrong_内操版` | 内操版错题本 `{ id: true }` |
 | `ysk_changelog_seen` | 最后看到的 commit hash，用于控制更新公告弹窗 |
 
+### CSS 类名常量
+
+所有 JS 模板中使用的 CSS 类名集中在 `State.CSS` 对象中定义：
+
+```javascript
+// state.js — CSS 类名常量
+const CSS = {
+  CHIP: 'chip', ACTIVE: 'active', COUNT: 'count',
+  TYPE_BTN: 'type-btn',
+  Q_CARD: 'q-card', Q_CARD_HEADER: 'q-card-header',
+  Q_TYPE_BADGE: 'q-type-badge', Q_CHAPTER_LABEL: 'q-chapter-label',
+  Q_TEXT: 'q-text', Q_OPTIONS: 'q-options',
+  OPT_ROW: 'opt-row', REVEALED: 'revealed', WRONG: 'wrong',
+  Q_ANSWER: 'q-answer', VISIBLE: 'visible', LABEL: 'label',
+  Q_SHOW_ANSWER_BTN: 'q-show-answer-btn',
+  Q_ACTIONS: 'q-actions', Q_ACTION_BTN: 'q-action-btn',
+  Q_NOTE_BTN: 'q-note-btn', Q_REPORT_BTN: 'q-report-btn',
+  VER_BTN: 'ver-btn',
+  OVERLAY_CARD: 'overlay-card', RIPPLE: 'ripple',
+  CLICKED: 'clicked', EXIT: 'exit', HIDE: 'hide',
+};
+```
+
+**使用规则**：
+- 模板字符串中引用的 CSS 类名必须通过 `State.CSS.XXX` 常量，不能直接写字符串字面量
+- 修改 CSS 类名只需改 `state.js` 中的常量定义
+- 命名约定：`Q_XXX` 前缀表示题目卡片相关 class，其余使用驼峰式大写下划线
+
 ### 展平后的题目模型 (flatQs)
 
 ```javascript
