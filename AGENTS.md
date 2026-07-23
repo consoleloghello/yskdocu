@@ -181,7 +181,7 @@ const CSS = {
 | 登录弹窗 `#loginModal` | 点击 🔐 登录按钮 | 登录/注册/邮箱验证 |
 | 笔记弹窗 `#noteModal` | 点击题卡的 📝 笔记按钮（仅登录） | 保存/编辑/删除题目笔记 |
 | 报错弹窗 `#reportModal` | 点击题卡的 🐛 报错按钮（仅登录） | 提交题目纠错反馈 |
-| 更新公告弹窗 `#changelogModal` | 检测到新的 commit hash | 显示最近 3 条更新记录 |
+| 更新公告弹窗 `#changelogModal` | 检测到新的 commit hash | 显示最近 5 条更新记录 |
 
 ## docx 解析器 (`scripts/parse_docx.py`)
 

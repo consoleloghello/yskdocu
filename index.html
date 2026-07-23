@@ -84,7 +84,7 @@
       <button class="type-btn" data-type="应急处理题">应急</button>
     </div>
   </nav>
-  <!-- Algorithm art signature (sticky, always visible) -->
+  <!-- Algorithm art signature (always visible) -->
   <div id="artSignature">
     每一个气泡都是一个微反应器。它们在成核点诞生，在碰撞中合并，在表面破裂——就像冷却塔顶飘散的水雾，像好氧池中翻涌的细泡，像锅炉永不停歇的沸腾。没有人看见它们，但整个化工厂的呼吸，都藏在这些转瞬即逝的泡沫里。🧪量子泡沫 — 算法艺术
   </div>
@@ -93,7 +93,6 @@
   <main id="mainContent">
     <div id="topActions" style="display:none">
       <button id="wrongBookBtn" class="action-btn" title="错题本">❌ 错题 (0)</button>
-
       <button id="revealAllBtn" class="action-btn">👁 全部显示</button>
       <button id="hideAllBtn" class="action-btn" style="display:none">🙈 全部隐藏</button>
     </div>
@@ -102,7 +101,6 @@
       <h2>选择章节开始刷题</h2>
       <p id="welcomeStats">加载中...</p>
     </div>
-
     <div id="questionList" style="display:none"></div>
   </main>
 </div>
@@ -190,18 +188,24 @@
   </div>
 </div>
 
-<!-- CDN: p5.js + Supabase SDK + Chart.js -->
+<!-- App scripts -->
+<script src="js/state.js"></script>
+<script src="js/renderer.js"></script>
+<script src="js/app.js?v=2"></script>
+
+<!-- CDN: p5.js -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.0/p5.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <!-- p5.js 背景动画脚本 -->
 <script src="js/background-fluid-memory.js"></script>
 <script src="js/background-quantum-foam.js"></script>
-<!-- App scripts -->
+
+<!-- CDN: Supabase SDK -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="js/supabase.js"></script>
 <script src="js/sync.js"></script>
- <script src="js/state.js"></script>
- <script src="js/renderer.js"></script>
- <script src="js/app.js?v=2"></script>
+
+<!-- CDN: Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+
 </body>
 </html>
