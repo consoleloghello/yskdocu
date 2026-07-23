@@ -134,6 +134,42 @@
   const QUESTION_TYPES = ['选择题', '填空题', '判断题', '简答题', '实操分析题', '应急处理题'];
   const DIRECT_TYPES = ['简答题', '实操分析题', '应急处理题', '填空题'];
 
+  // ============================================================
+  // CSS 类名常量 — 集中定义以便修改
+  // ============================================================
+  const CSS = {
+    // 导航 & 筛选
+    CHIP: 'chip',
+    ACTIVE: 'active',
+    COUNT: 'count',
+    TYPE_BTN: 'type-btn',
+    // 题目卡片
+    Q_CARD: 'q-card',
+    Q_CARD_HEADER: 'q-card-header',
+    Q_TYPE_BADGE: 'q-type-badge',
+    Q_CHAPTER_LABEL: 'q-chapter-label',
+    Q_TEXT: 'q-text',
+    Q_OPTIONS: 'q-options',
+    OPT_ROW: 'opt-row',
+    REVEALED: 'revealed',
+    WRONG: 'wrong',
+    Q_ANSWER: 'q-answer',
+    VISIBLE: 'visible',
+    LABEL: 'label',
+    Q_SHOW_ANSWER_BTN: 'q-show-answer-btn',
+    Q_ACTIONS: 'q-actions',
+    Q_ACTION_BTN: 'q-action-btn',
+    Q_NOTE_BTN: 'q-note-btn',
+    Q_REPORT_BTN: 'q-report-btn',
+    // 版本切换 & 入口
+    VER_BTN: 'ver-btn',
+    OVERLAY_CARD: 'overlay-card',
+    RIPPLE: 'ripple',
+    CLICKED: 'clicked',
+    EXIT: 'exit',
+    HIDE: 'hide',
+  };
+
   window.State = {
     // 数据引用（由 app.js buildFlat 设置）
     get data() {
@@ -234,5 +270,6 @@
     debounce: debounce,
     QUESTION_TYPES: QUESTION_TYPES,
     DIRECT_TYPES: DIRECT_TYPES,
+    CSS: CSS,
   };
 })();

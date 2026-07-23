@@ -84,10 +84,11 @@
     const el = State.$('chapterList');
     const st = State.get();
     const chShow = st.mode === 'wrong' ? 'all' : st.chapter;
+    const C = State.CSS;
     let h =
-      '<button class="chip ' +
-      (chShow === 'all' ? 'active' : '') +
-      '" data-ch="all">全部<span class="count">' +
+      '<button class="' + C.CHIP + ' ' +
+      (chShow === 'all' ? C.ACTIVE : '') +
+      '" data-ch="all">全部<span class="' + C.COUNT + '">' +
       State.flatQs.length +
       '</span></button>';
     State.data.chapters.forEach(function (ch) {
@@ -95,18 +96,18 @@
         return s + g.questions.length;
       }, 0);
       h +=
-        '<button class="chip ' +
-        (chShow === ch.name ? 'active' : '') +
+        '<button class="' + C.CHIP + ' ' +
+        (chShow === ch.name ? C.ACTIVE : '') +
         '" data-ch="' +
         ch.name +
         '">' +
         ch.name +
-        '<span class="count">' +
+        '<span class="' + C.COUNT + '">' +
         cnt +
         '</span></button>';
     });
     el.innerHTML = h;
-    el.querySelectorAll('.chip').forEach(function (el2) {
+    el.querySelectorAll('.' + C.CHIP).forEach(function (el2) {
       el2.addEventListener('click', function () {
         State.setMulti({ chapter: el2.dataset.ch, type: 'all', mode: 'browse', searchQuery: '' });
         State.$('searchInput').value = '';
@@ -118,6 +119,7 @@
   function renderTypeFilters() {
     const el = State.$('typeFilters');
     const st = State.get();
+    const C = State.CSS;
     let base;
     if (st.mode === 'wrong') {
       base = State.flatQs.filter(function (q) {
@@ -144,25 +146,25 @@
     }
     el.style.display = 'flex';
     let h =
-      '<button class="type-btn ' +
-      (st.type === 'all' ? 'active' : '') +
-      '" data-type="all">全部 <span class="count">' +
+      '<button class="' + C.TYPE_BTN + ' ' +
+      (st.type === 'all' ? C.ACTIVE : '') +
+      '" data-type="all">全部 <span class="' + C.COUNT + '">' +
       total +
       '</span></button>';
     sorted.forEach(function (t) {
       h +=
-        '<button class="type-btn ' +
-        (st.type === t ? 'active' : '') +
+        '<button class="' + C.TYPE_BTN + ' ' +
+        (st.type === t ? C.ACTIVE : '') +
         '" data-type="' +
         t +
         '">' +
         t +
-        ' <span class="count">' +
+        ' <span class="' + C.COUNT + '">' +
         types[t] +
         '</span></button>';
     });
     el.innerHTML = h;
-    el.querySelectorAll('.type-btn').forEach(function (el2) {
+    el.querySelectorAll('.' + C.TYPE_BTN).forEach(function (el2) {
       el2.addEventListener('click', function () {
         State.set('type', el2.dataset.type);
         render();
@@ -173,6 +175,7 @@
   function renderCards(qs) {
     _currentQuestions = qs;
     const st = State.get();
+    const C = State.CSS;
     const isSearch = st.searchQuery !== '';
     const isLoggedIn = window.SupabaseAuth && window.SupabaseAuth.isLoggedIn();
     const $ = State.getEl;
@@ -191,30 +194,30 @@
       const notes = State.getLocalNotes();
       const hasNote = notes[q._id];
       h +=
-        '<div class="q-card" data-id="' +
+        '<div class="' + C.Q_CARD + '" data-id="' +
         q._id +
         '">' +
-        '<div class="q-card-header"><span class="q-type-badge">' +
+        '<div class="' + C.Q_CARD_HEADER + '"><span class="' + C.Q_TYPE_BADGE + '">' +
         q._type +
-        '</span><span class="q-chapter-label">' +
+        '</span><span class="' + C.Q_CHAPTER_LABEL + '">' +
         q._chapter +
         ' · #' +
         (idx + 1) +
         '</span></div>' +
-        '<div class="q-text">' +
+        '<div class="' + C.Q_TEXT + '">' +
         highlightText(q.question, st.searchQuery) +
         '</div>';
       if (q.options && q.options.length > 0) {
-        h += '<div class="q-options">';
+        h += '<div class="' + C.Q_OPTIONS + '">';
         q.options.forEach(function (opt, oi) {
           const letter = String.fromCharCode(65 + oi);
           const correct = q.answer && q.answer.toUpperCase() === letter;
-          let cls = 'opt-row';
+          let cls = C.OPT_ROW;
           if (isRevealed && correct) {
-            cls += ' revealed';
+            cls += ' ' + C.REVEALED;
           }
           if (isRevealed && !correct && isWrong) {
-            cls += ' wrong';
+            cls += ' ' + C.WRONG;
           }
           h +=
             '<div class="' +
@@ -238,14 +241,14 @@
       }
       const showAns = isDirect || isRevealed;
       h +=
-        '<div class="q-answer ' +
-        (showAns ? 'visible' : '') +
-        '"><div class="label">📝 参考答案</div>' +
+        '<div class="' + C.Q_ANSWER + ' ' +
+        (showAns ? C.VISIBLE : '') +
+        '"><div class="' + C.LABEL + '">📝 参考答案</div>' +
         highlightText(ansHtml, st.searchQuery) +
         '</div>';
       if (!isDirect) {
         h +=
-          '<button class="q-show-answer-btn" data-id="' +
+          '<button class="' + C.Q_SHOW_ANSWER_BTN + '" data-id="' +
           q._id +
           '">' +
           (isRevealed ? '隐藏答案' : '显示答案') +
@@ -253,13 +256,13 @@
       }
       if (isLoggedIn) {
         h +=
-          '<div class="q-actions">' +
-          '<button class="q-action-btn q-note-btn" data-id="' +
+          '<div class="' + C.Q_ACTIONS + '">' +
+          '<button class="' + C.Q_ACTION_BTN + ' ' + C.Q_NOTE_BTN + '" data-id="' +
           q._id +
           '">' +
           (hasNote ? '📝✏️' : '📝') +
           ' 笔记</button>' +
-          '<button class="q-action-btn q-report-btn" data-id="' +
+          '<button class="' + C.Q_ACTION_BTN + ' ' + C.Q_REPORT_BTN + '" data-id="' +
           q._id +
           '">🐛 报错</button></div>';
       }

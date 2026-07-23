@@ -13,6 +13,7 @@
 
   const S = window.State;
   const R = window.Render;
+  const C = S.CSS;
   const qList = S.$('questionList');
   const $ = S.getEl;
   const state = S.get();
@@ -32,7 +33,6 @@
   const loadState = S.load;
   const saveState = S.save;
   const esc = S.escapeHtml;
-  const highlightText = S.highlightText;
   const renderStatsChart = R.renderStatsChart;
 
   async function loadData(ver) {
@@ -48,11 +48,11 @@
       flatQs.forEach((q) => revealed.add(q._id));
       state.version = ver;
       if (ver === '外操版') {
-        $('verWaic').classList.add('active');
-        $('verNei').classList.remove('active');
+        $('verWaic').classList.add(C.ACTIVE);
+        $('verNei').classList.remove(C.ACTIVE);
       } else {
-        $('verNei').classList.add('active');
-        $('verWaic').classList.remove('active');
+        $('verNei').classList.add(C.ACTIVE);
+        $('verWaic').classList.remove(C.ACTIVE);
       }
       const wb = ls('ysk_wrong_' + ver);
       if (wb) {
@@ -148,191 +148,18 @@
     S.flatQs = flatQs;
   }
 
-  function getCurrentQs() {
-    if (state.mode === 'wrong') {
-      return flatQs.filter((q) => state.wrongBook[q._id]);
-    }
-    let list = state.searchQuery
-      ? searchIn(flatQs, state.searchQuery)
-      : state.chapter === 'all'
-        ? flatQs
-        : flatQs.filter((q) => q._chapter === state.chapter);
-    if (state.type !== 'all') {
-      list = list.filter((q) => q._type === state.type);
-    }
-    return list;
-  }
-
-  function searchIn(arr, query) {
-    const q = query.toLowerCase();
-    return arr.filter((item) => {
-      const haystack = [
-        item.question,
-        item.answer,
-        item._chapter,
-        item._type,
-        ...(item.options || []),
-      ].join(' ');
-      return haystack.toLowerCase().includes(q);
-    });
-  }
-
-  function countByType(arr) {
-    const m = {};
-    arr.forEach((q) => {
-      m[q._type] = (m[q._type] || 0) + 1;
-    });
-    return m;
-  }
-
   function render() {
     if (!data) {
       return;
     }
-    renderChapters();
-    renderTypeFilters();
-    updateStats();
-    const qs = getCurrentQs();
-    $('topActions').style.display = qs.length ? 'flex' : 'none';
-    if (qs.length === 0) {
-      $('welcome').style.display = 'block';
-      qList.style.display = 'none';
-      if (state.searchQuery) {
-        $('welcome').querySelector('p').textContent = '未找到匹配题目';
-      } else if (state.mode === 'wrong') {
-        $('welcome').querySelector('h2').textContent = '🎉 错题本为空';
-        $('welcome').querySelector('p').textContent = '继续加油！';
-      } else {
-        $('welcome').querySelector('h2').textContent = '📖 选择章节开始刷题';
-        $('welcome').querySelector('p').textContent =
-          data?.info?.title + ' · ' + (state.searchQuery || '浏览模式');
-      }
-      return;
-    }
-    $('welcome').style.display = 'none';
-    qList.style.display = 'block';
-    renderCards(qs);
-  }
-
-  function renderChapters() {
-    const el = $('chapterList');
-    const chShow = state.mode === 'wrong' ? 'all' : state.chapter;
-    let h = `<button class="chip ${chShow === 'all' ? 'active' : ''}" data-ch="all">全部<span class="count">${flatQs.length}</span></button>`;
-    data.chapters.forEach((ch) => {
-      const cnt = ch.type_groups.reduce((s, g) => s + g.questions.length, 0);
-      h += `<button class="chip ${chShow === ch.name ? 'active' : ''}" data-ch="${ch.name}">${ch.name}<span class="count">${cnt}</span></button>`;
-    });
-    el.innerHTML = h;
-    el.querySelectorAll('.chip').forEach((el2) => {
-      el2.addEventListener('click', () => {
-        state.chapter = el2.dataset.ch;
-        state.type = 'all';
-        state.mode = 'browse';
-        state.searchQuery = '';
-        $('searchInput').value = '';
-        saveState();
-        render();
-      });
-    });
-  }
-
-  function renderTypeFilters() {
-    const el = $('typeFilters');
-    let base;
-    if (state.mode === 'wrong') {
-      base = flatQs.filter((q) => state.wrongBook[q._id]);
-    } else {
-      base = state.searchQuery
-        ? searchIn(flatQs, state.searchQuery)
-        : state.chapter === 'all'
-          ? flatQs
-          : flatQs.filter((q) => q._chapter === state.chapter);
-    }
-    const types = countByType(base);
-    const order = ['选择题', '填空题', '判断题', '简答题', '实操分析题', '应急处理题'];
-    const sorted = order.filter((t) => types[t]);
-    const total = base.length;
-    if (sorted.length <= 1 && state.type === 'all') {
-      el.style.display = 'none';
-      return;
-    }
-    el.style.display = 'flex';
-    let h = `<button class="type-btn ${state.type === 'all' ? 'active' : ''}" data-type="all">全部 <span class="count">${total}</span></button>`;
-    sorted.forEach((t) => {
-      h += `<button class="type-btn ${state.type === t ? 'active' : ''}" data-type="${t}">${t} <span class="count">${types[t]}</span></button>`;
-    });
-    el.innerHTML = h;
-    el.querySelectorAll('.type-btn').forEach((el2) => {
-      el2.addEventListener('click', () => {
-        state.type = el2.dataset.type;
-        saveState();
-        render();
-      });
-    });
+    R.render();
+    _currentQs = R.getCurrentQs();
   }
 
   let _currentQs = [];
   function renderCards(qs) {
     _currentQs = qs;
-    const isSearch = state.searchQuery !== '';
-    const isLoggedIn = window.SupabaseAuth && window.SupabaseAuth.isLoggedIn();
-    let h = `<div id="listInfo" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-    <span style="font-size:13px;color:var(--text2)">共 ${qs.length} 题${isSearch ? ' (搜索结果)' : ''}</span>
-    <span style="font-size:12px;color:var(--text2)">点击选项/按钮显示答案</span>
-  </div>`;
-    qs.forEach((q, idx) => {
-      const isRevealed = revealed.has(q._id);
-      const isWrong = state.wrongBook[q._id];
-      const hasNote = localNotes[q._id];
-      h += `<div class="q-card" data-id="${q._id}">
-      <div class="q-card-header">
-        <span class="q-type-badge">${q._type}</span>
-        <span class="q-chapter-label">${q._chapter} · #${idx + 1}</span>
-      </div>
-      <div class="q-text">${highlightText(q.question, state.searchQuery)}</div>`;
-      // Options for 选择题
-      if (q.options && q.options.length > 0) {
-        h += '<div class="q-options">';
-        q.options.forEach((opt, oi) => {
-          const letter = String.fromCharCode(65 + oi);
-          const correct = q.answer && q.answer.toUpperCase() === letter;
-          let cls = 'opt-row';
-          if (isRevealed && correct) {
-            cls += ' revealed';
-          }
-          if (isRevealed && !correct && isWrong) {
-            cls += ' wrong';
-          }
-          h += `<div class="${cls}" data-letter="${letter}">${highlightText(opt, state.searchQuery)}</div>`;
-        });
-        h += '</div>';
-      }
-      // Answer
-      const isDirect = ['简答题', '实操分析题', '应急处理题', '填空题'].includes(q._type);
-      let ansHtml = '';
-      if (q._type === '判断题') {
-        ansHtml = q.answer === '√' ? '正确 ✓' : '错误 ✗';
-      } else if (q._type === '选择题') {
-        ansHtml = q.answer ? '正确答案：' + q.answer : '⚠ 答案未标注';
-      } else {
-        ansHtml = q.answer || '⚠ 答案未解析';
-      }
-      const showAns = isDirect || isRevealed;
-      h += `<div class="q-answer ${showAns ? 'visible' : ''}"><div class="label">📝 参考答案</div>${highlightText(ansHtml, state.searchQuery)}</div>`;
-      if (!isDirect) {
-        h += `<button class="q-show-answer-btn" data-id="${q._id}">${isRevealed ? '隐藏答案' : '显示答案'}</button>`;
-      }
-      // 登录用户：笔记和报错按钮
-      if (isLoggedIn) {
-        h += `<div class="q-actions">
-        <button class="q-action-btn q-note-btn" data-id="${q._id}">${hasNote ? '📝✏️' : '📝'} 笔记</button>
-        <button class="q-action-btn q-report-btn" data-id="${q._id}">🐛 报错</button>
-      </div>`;
-      }
-      h += '</div>';
-    });
-    qList.innerHTML = h;
-    updateTopActions();
+    R.renderCards(qs);
   }
 
   /** 云端记录答题结果（仅登录用户） */
@@ -347,24 +174,6 @@
     } else if (state.wrongBook[id]) {
       window.Sync.removeWrongQuestion(state.version, id);
     }
-  }
-
-  function updateTopActions() {
-    const wc = Object.keys(state.wrongBook).length;
-    $('wrongBookBtn').textContent = '❌ 错题 (' + wc + ')';
-    const shown = _currentQs.filter((q) => revealed.has(q._id)).length;
-    const total = _currentQs.length;
-    $('revealAllBtn').style.display = shown < total ? 'inline-block' : 'none';
-    $('hideAllBtn').style.display = shown > 0 ? 'inline-block' : 'none';
-  }
-
-  function updateStats() {
-    if (!data) {
-      return;
-    }
-    const wrong = Object.keys(state.wrongBook).length;
-    $('welcomeStats').innerHTML =
-      state.version + ' · ' + flatQs.length + ' 道题 · 错题 ' + wrong + ' 道';
   }
 
   // ============================================================
@@ -767,29 +576,29 @@
       state.version = ver;
       resetViewState();
 
-      overlay.classList.add('exit');
-      overlay.querySelectorAll('.overlay-card').forEach((c) => (c.style.pointerEvents = 'none'));
+      overlay.classList.add(C.EXIT);
+      overlay.querySelectorAll('.' + C.OVERLAY_CARD).forEach((c) => (c.style.pointerEvents = 'none'));
 
       setTimeout(() => {
         loadData(ver);
       }, 100);
 
       setTimeout(() => {
-        overlay.classList.add('hide');
-        overlay.classList.remove('exit');
+        overlay.classList.add(C.HIDE);
+        overlay.classList.remove(C.EXIT);
       }, 650);
     }
 
     cards.forEach((card) => {
       card.addEventListener('click', function (e) {
-        if (this.classList.contains('clicked')) {
+        if (this.classList.contains(C.CLICKED)) {
           return;
         }
-        this.classList.add('clicked');
+        this.classList.add(C.CLICKED);
 
         const rect = this.getBoundingClientRect();
         const ripple = document.createElement('span');
-        ripple.className = 'ripple';
+        ripple.className = C.RIPPLE;
         const size = Math.max(rect.width, rect.height);
         ripple.style.width = ripple.style.height = size + 'px';
         ripple.style.left = e.clientX - rect.left - size / 2 + 'px';
@@ -808,30 +617,30 @@
   // ============================================================
   qList.addEventListener('click', function (e) {
     // 显示/隐藏答案按钮
-    const btn = e.target.closest('.q-show-answer-btn');
+    const btn = e.target.closest('.' + C.Q_SHOW_ANSWER_BTN);
     if (btn) {
       e.stopPropagation();
       const id = btn.dataset.id;
-      const card = btn.closest('.q-card');
-      const answerDiv = card.querySelector('.q-answer');
+      const card = btn.closest('.' + C.Q_CARD);
+      const answerDiv = card.querySelector('.' + C.Q_ANSWER);
       if (revealed.has(id)) {
         revealed.delete(id);
-        answerDiv.classList.remove('visible');
+        answerDiv.classList.remove(C.VISIBLE);
         btn.textContent = '显示答案';
       } else {
         revealed.add(id);
-        answerDiv.classList.add('visible');
+        answerDiv.classList.add(C.VISIBLE);
         btn.textContent = '隐藏答案';
       }
       saveState();
-      updateTopActions();
+      R.updateTopActions();
       return;
     }
 
     // 选择题选项点击
-    const opt = e.target.closest('.opt-row');
+    const opt = e.target.closest('.' + C.OPT_ROW);
     if (opt) {
-      const card = opt.closest('.q-card');
+      const card = opt.closest('.' + C.Q_CARD);
       const id = card.dataset.id;
       if (revealed.has(id)) {
         return;
@@ -845,15 +654,15 @@
       }
       const hasAnswer = q.answer && q.answer.trim() !== '';
       const correct = hasAnswer && q.answer.toUpperCase() === letter;
-      card.querySelectorAll('.opt-row').forEach(function (o) {
+      card.querySelectorAll('.' + C.OPT_ROW).forEach(function (o) {
         const l = o.dataset.letter;
         if (hasAnswer && l === q.answer) {
-          o.classList.add('revealed');
+          o.classList.add(C.REVEALED);
         } else if (o === opt && !correct) {
-          o.classList.add('wrong');
+          o.classList.add(C.WRONG);
         }
       });
-      card.querySelector('.q-answer').classList.add('visible');
+      card.querySelector('.' + C.Q_ANSWER).classList.add(C.VISIBLE);
       revealed.add(id);
       if (hasAnswer) {
         if (!correct) {
@@ -863,13 +672,13 @@
         }
       }
       saveState();
-      updateTopActions();
+      R.updateTopActions();
       logAnswer(q, correct);
       return;
     }
 
     // 笔记按钮
-    const noteBtn = e.target.closest('.q-note-btn');
+    const noteBtn = e.target.closest('.' + C.Q_NOTE_BTN);
     if (noteBtn) {
       e.stopPropagation();
       openNoteModal(noteBtn.dataset.id);
@@ -877,7 +686,7 @@
     }
 
     // 报错按钮
-    const reportBtn = e.target.closest('.q-report-btn');
+    const reportBtn = e.target.closest('.' + C.Q_REPORT_BTN);
     if (reportBtn) {
       e.stopPropagation();
       openReportModal(reportBtn.dataset.id);
