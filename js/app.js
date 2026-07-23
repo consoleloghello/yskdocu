@@ -19,7 +19,7 @@
   const state = S.get();
   let data = null;
   let flatQs = [];
-  const revealed = S.getRevealed();
+  let revealed = S.getRevealed();
   const localNotes = S.getLocalNotes();
   const reportedQuestions = S.getReportedQuestions();
   const ls = function (k) {
@@ -696,6 +696,7 @@
 
   // Init
   loadState();
+  revealed = S.getRevealed();  // sync reference after _load() may replace the Set
   // 启动认证状态监听
   initAuthSync();
 })();

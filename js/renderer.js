@@ -86,31 +86,20 @@
     const chShow = st.mode === 'wrong' ? 'all' : st.chapter;
     const C = State.CSS;
     let h =
-      '<button class="' + C.CHIP + ' ' +
-      (chShow === 'all' ? C.ACTIVE : '') +
-      '" data-ch="all">全部<span class="' + C.COUNT + '">' +
-      State.flatQs.length +
-      '</span></button>';
-    State.data.chapters.forEach(function (ch) {
-      const cnt = ch.type_groups.reduce(function (s, g) {
+      '<button class="' + C.CHIP + ' ' + (chShow === 'all' ? C.ACTIVE : '') + '" data-ch="all">全部<span class="' + C.COUNT + '">' + State.flatQs.length + '</span></button>';
+      State.data.chapters.forEach(function (ch) {
+        const cnt = ch.type_groups.reduce(function (s, g) {
         return s + g.questions.length;
       }, 0);
       h +=
-        '<button class="' + C.CHIP + ' ' +
-        (chShow === ch.name ? C.ACTIVE : '') +
-        '" data-ch="' +
-        ch.name +
-        '">' +
-        ch.name +
-        '<span class="' + C.COUNT + '">' +
-        cnt +
-        '</span></button>';
+        '<button class="' + C.CHIP + ' ' + (chShow === ch.name ? C.ACTIVE : '') + '" data-ch="' + ch.name +  '">' + ch.name + '<span class="' + C.COUNT + '">' + cnt + '</span></button>';
     });
     el.innerHTML = h;
     el.querySelectorAll('.' + C.CHIP).forEach(function (el2) {
       el2.addEventListener('click', function () {
         State.setMulti({ chapter: el2.dataset.ch, type: 'all', mode: 'browse', searchQuery: '' });
         State.$('searchInput').value = '';
+        el2.scrollIntoView({behavior:"smooth",block:"nearest",inline:"center"});
         render();
       });
     });

@@ -33,7 +33,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 
 /* Chapter Nav */
 #chapterNav{max-width:800px;margin:8px auto;padding:0 14px}
-#chapterList{display:flex;gap:6px;flex-wrap:wrap;padding:4px 0}
+#chapterList{display:flex;gap:6px;padding:4px 0;overflow-x: auto;scrollbar-width:none}
 .chip{padding:7px 14px;border-radius:20px;border:1px solid var(--border);background:var(--card);cursor:pointer;font-size:13px;white-space:nowrap;transition:.15s;flex-shrink:0}
 .chip:hover{border-color:var(--primary);color:var(--primary)}
 .chip.active{background:var(--primary);color:#fff;border-color:var(--primary);font-weight:600}
@@ -158,7 +158,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 
 /* Algorithm art signature (sticky between nav and content) */
 #artSignature {
-  position: sticky;
+  /* position: sticky; */
   top: 48px;
   z-index: 50;
   max-width: 800px;
