@@ -37,11 +37,15 @@
 
   async function loadData(ver) {
     try {
-      const r = await fetch('data/' + ver + '.json');
-      if (!r.ok) {
-        throw new Error('HTTP ' + r.status);
+      if (window.Decompress) {
+        data = await window.Decompress.fetchJSON('data/' + ver);
+      } else {
+        const r = await fetch('data/' + ver + '.json');
+        if (!r.ok) {
+          throw new Error('HTTP ' + r.status);
+        }
+        data = await r.json();
       }
-      data = await r.json();
       S.data = data;
       buildFlat();
       revealed.clear();

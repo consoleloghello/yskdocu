@@ -36,6 +36,9 @@ jobs:
       - name: Generate changelog
         run: node scripts/gen_changelog.mjs
 
+      - name: Compress JSON data
+        run: node scripts/compress_data.mjs
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
 

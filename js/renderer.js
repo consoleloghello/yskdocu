@@ -96,6 +96,10 @@
     });
     el.innerHTML = h;
     el.querySelectorAll('.' + C.CHIP).forEach(function (el2) {
+      // 滑动到激活的按钮
+      if (el2.className == C.CHIP + " " + C.ACTIVE) {
+        el2.scrollIntoView({behavior:"smooth",block:"nearest",inline:"center"});
+      }
       el2.addEventListener('click', function () {
         State.setMulti({ chapter: el2.dataset.ch, type: 'all', mode: 'browse', searchQuery: '' });
         State.$('searchInput').value = '';
@@ -154,8 +158,13 @@
     });
     el.innerHTML = h;
     el.querySelectorAll('.' + C.TYPE_BTN).forEach(function (el2) {
+      // 滑动到激活的按钮
+      if (el2.className == C.TYPE_BTN + " " + C.ACTIVE) {
+        el2.scrollIntoView({behavior:"smooth",block:"nearest",inline:"center"});
+      }
       el2.addEventListener('click', function () {
         State.set('type', el2.dataset.type);
+        el2.scrollIntoView({behavior:"smooth",block:"nearest",inline:"center"});
         render();
       });
     });

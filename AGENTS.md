@@ -28,6 +28,9 @@ npm run format                        # Prettier 格式化（js/ 目录）
 npm test                              # pytest 运行 tests/ 目录全部测试
 npm run test:coverage                 # 测试 + 覆盖率报告
 
+# 压缩 JSON 数据文件（解析 docx 后或部署前运行）
+npm run compress                      # gzip 压缩 data/*.json → *.json.gz
+
 # 重新解析 docx 题库文件输出 JSON
 python scripts/parse_docx.py      # 读取根目录下的 .docx，写入 data/*.json
 
@@ -51,13 +54,18 @@ node scripts/gen_changelog.mjs     # 读取最近3条 git commit，输出 data/c
 │   ├── renderer.js            # window.Render — DOM 渲染、统计图表
 │   ├── app.js                 # 主控制器：加载数据、事件绑定、弹窗逻辑、版本切换
 │   ├── supabase.js            # window.SupabaseAuth — Supabase 认证（登录/注册/登出）
-│   └── sync.js                # window.Sync — 云端 CRUD（错题、笔记、统计、报错）
+│   ├── sync.js                # window.Sync — 云端 CRUD（错题、笔记、统计、报错）
+│   └── decompress.js          # window.Decompress — 浏览器端 gzip 解压工具（DecompressionStream）
 ├── data/
 │   ├── 外操版.json             # 外操作题库 JSON
 │   ├── 内操版.json             # 内操作题库 JSON
 │   └── changelog.json         # 更新日志（由 gen_changelog.mjs 生成）
+├── data/
+│   ├── 外操版.json.gz           # gzip 压缩版（约 33 KB，由 compress_data.mjs 生成）
+│   ├── 内操版.json.gz           # gzip 压缩版（约 32 KB，由 compress_data.mjs 生成）
 ├── scripts/
 │   ├── parse_docx.py          # docx → JSON 解析器（python-docx）
+│   ├── compress_data.mjs      # gzip 压缩 data/*.json → *.json.gz（npm run compress）
 │   ├── serve.mjs              # Node.js 开发服务器
 │   ├── gen_changelog.mjs      # 生成更新日志脚本
 │   ├── init_supabase.sql      # Supabase 数据库初始化 SQL
@@ -107,6 +115,7 @@ node scripts/gen_changelog.mjs     # 读取最近3条 git commit，输出 data/c
 |---|---|
 | `js/supabase.js` (`window.SupabaseAuth`) | 初始化 supabase 客户端、邮箱密码登录/注册、OTP 邮箱验证、登出、session 管理、UI 更新 |
 | `js/sync.js` (`window.Sync`) | 云端 CRUD 封装：错题增删（upsert）、统计上报（分页 fetchAll）、笔记读写、报错提交 |
+| `js/decompress.js` (`window.Decompress`) | 浏览器端 gzip 解压：利用原生 DecompressionStream 解压 `.json.gz` 文件，自动降级到 `.json` |
 
 登录后数据同时写入 localStorage（缓存）和 Supabase（主存储），离线不阻塞。
 登录时自动从云端拉取错题和笔记合并到本地。
@@ -167,7 +176,16 @@ const CSS = {
 }
 ```
 
-### 版本切换 & 入口遮罩
+#### JSON 压缩优化
+
+项目使用 gzip 算法压缩数据文件以加快首次加载速度：
+
+1. 运行 `npm run compress` 执行 `scripts/compress_data.mjs`，使用 Node.js `zlib.gzipSync()` 将 `data/*.json` 压缩为 `data/*.json.gz`（压缩比约 23%）
+2. `js/decompress.js` 在浏览器端通过原生 `DecompressionStream('gzip')` API 解压，无需额外库
+3. `js/app.js` 的 `loadData()` 优先加载 `.json.gz` 文件，若失败则自动降级到 `.json`
+4. 开发服务器 `serve.mjs` 默认以 `application/octet-stream` 提供 `.gz` 文件
+
+# 版本切换 & 入口遮罩
 
 首次访问显示渐变遮罩（玻璃态设计），要求用户选择外操版/内操版后进入主界面。选择时有 ripple 动画和弹出过渡。
 后续切换版本通过顶部导航栏按钮完成。`app.js` 中的 `resetViewState()` 辅助函数重置所有筛选条件。

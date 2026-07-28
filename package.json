@@ -6,6 +6,7 @@
     "start": "node scripts/serve.mjs",
     "lint": "eslint js/",
     "lint:fix": "eslint js/ --fix",
+    "compress": "node scripts/compress_data.mjs",
     "format": "prettier --write js/",
     "test": "pytest tests/",
     "test:coverage": "pytest tests/ --cov=scripts/parse_docx --cov-report=term-missing"
