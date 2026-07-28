@@ -37,13 +37,16 @@ python -m http.server 8899
 ```bash
 npm install
 npm run lint            # ESLint 检查
+npm run lint:fix        # ESLint 自动修复
 npm run format          # Prettier 格式化
+npm run compress        # gzip 压缩 data/*.json → *.json.gz
 npm test                # pytest 运行解析器测试
+npm run test:coverage   # 测试 + 覆盖率报告
 ```
 
 ## 部署到 GitHub Pages
 
-Push 到 `main` 分支后，GitHub Actions 自动生成更新公告并部署。
+Push 到 `main` 分支后，GitHub Actions 自动完成：解析 docx → 生成 changelog → gzip 压缩 JSON → 部署到 GitHub Pages。
 
 > **首次配置**：仓库 Settings → Pages → Source 选择 **GitHub Actions**（仅需一次）。
 
@@ -56,8 +59,9 @@ Push 到 `main` 分支后，GitHub Actions 自动生成更新公告并部署。
 python scripts/parse_docx.py
 ```
 
-3. 提交更新后的 `data/` 目录下 JSON 文件
-4. 如需验证解析正确性：`python -m pytest tests/`
+3. 运行压缩脚本生成 `.json.gz` 文件：`npm run compress`
+4. 提交更新后的 `data/` 目录下 JSON 和 `.json.gz` 文件
+5. 如需验证解析正确性：`python -m pytest tests/`
 
 ## 更新公告
 
@@ -71,7 +75,7 @@ node scripts/gen_changelog.mjs     # 输出 data/changelog.json，需提交到�
 
 | 层次 | 技术 |
 |------|------|
-| 前端 | Vanilla JS (5 模块: state / renderer / app / supabase / sync) + CSS3 |
+| 前端 | Vanilla JS (6 模块: state / renderer / app / supabase / sync / decompress) + CSS3 |
 | 文档解析 | Python 3 + python-docx |
 | 后端服务 | Supabase (PostgreSQL + Auth + REST API) |
 | 图表 | Chart.js v4 (CDN) |
