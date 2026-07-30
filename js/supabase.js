@@ -63,7 +63,11 @@
     return data;
   }
 
-  /** 邮箱密码注册 */
+  /**
+   * 邮箱密码注册
+   * 注册后根据 Supabase 设置可能直接登录（session 存在）
+   * 或进入邮箱验证流程（identities 为空表示用户已存在）
+   */
   async function signUp(email, password, nickname) {
     if (!supabase) {
       throw new Error('Supabase 未初始化');
@@ -157,7 +161,7 @@
       loginBtn.style.display = 'none';
       userInfo.style.display = 'flex';
       if (userName) {
-        // 优先显示用户自定义的 nickname（从 profiles 表），否则显示邮箱前缀
+        // 显示用户信息：优先 nickname（注册时可选填），再取邮箱 @ 前缀，最后 fallback 为「用户」
         userName.textContent =
           currentUser.user_metadata?.nickname ||
           (currentUser.email ? currentUser.email.split('@')[0] : '用户');

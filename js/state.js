@@ -26,55 +26,58 @@
   // ============================================================
   // DOM / localStorage 辅助
   // ============================================================
+  /** 通过 ID 获取 DOM 元素 */
   function getEl(id) {
     return document.getElementById(id);
   }
-  function _loadFromStorage(key) {
+  /** 从 localStorage 读取并解析 JSON，解析失败或不存在时返回 null */
+  function _loadFromStorage(storageKey) {
     try {
-      return JSON.parse(localStorage.getItem(key));
+      return JSON.parse(localStorage.getItem(storageKey));
     } catch (e) {
-      /* silent */
+      // JSON 格式损坏时静默处理
     }
     return null;
   }
-  function _saveToStorage(key, v) {
+  /** 将值序列化为 JSON 写入 localStorage，捕获 QuotaExceededError 等异常 */
+  function _saveToStorage(storageKey, value) {
     try {
-      localStorage.setItem(key, JSON.stringify(v));
+      localStorage.setItem(storageKey, JSON.stringify(value));
     } catch (e) {
-      /* silent */
+      // 存储空间满或隐私模式下静默失败
     }
   }
 
   // ============================================================
   // 状态持久化
   // ============================================================
-  function _load() {
-    const s = _loadFromStorage('ysk_state');
-    if (s) {
-      for (const k in s) {
-        _state[k] = s[k];
+  function _loadState() {
+    const savedState = _loadFromStorage('ysk_state');
+    if (savedState) {
+      for (const key in savedState) {
+        _state[key] = savedState[key];
       }
     }
-    const wb = _loadFromStorage('ysk_wrong_' + _state.version);
-    if (wb) {
-      _state.wrongBook = wb;
+    const wrongBookData = _loadFromStorage('ysk_wrong_' + _state.version);
+    if (wrongBookData) {
+      _state.wrongBook = wrongBookData;
     } else if (Object.keys(_state.wrongBook).length === 0) {
       _state.wrongBook = {};
     }
-    const r = _loadFromStorage('ysk_revealed');
-    if (r) {
-      _revealed = new Set(r);
+    const revealedData = _loadFromStorage('ysk_revealed');
+    if (revealedData) {
+      _revealed = new Set(revealedData);
     }
   }
 
-  function _save() {
-    const rest = {};
-    for (const k in _state) {
-      if (k !== 'wrongBook' && _state.hasOwnProperty(k)) {
-        rest[k] = _state[k];
+  function _saveState() {
+    const stateWithoutWrongBook = {};
+    for (const key in _state) {
+      if (key !== 'wrongBook' && _state.hasOwnProperty(key)) {
+        stateWithoutWrongBook[key] = _state[key];
       }
     }
-    _saveToStorage('ysk_state', rest);
+    _saveToStorage('ysk_state', stateWithoutWrongBook);
     _saveToStorage('ysk_wrong_' + _state.version, _state.wrongBook);
     _saveToStorage('ysk_revealed', [..._revealed]);
   }
@@ -82,16 +85,18 @@
   // ============================================================
   // HTML 转义 & 搜索高亮
   // ============================================================
-  let _escNode;
-  function escapeHtml(t) {
-    if (!t) {
+  // 利用 DOM 节点的 textContent → innerHTML 机制安全转义 HTML 特殊字符
+  // 避免 XSS 攻击，比正则替换更可靠
+  let _escapeDiv;
+  function escapeHtml(text) {
+    if (!text) {
       return '';
     }
-    if (!_escNode) {
-      _escNode = document.createElement('div');
+    if (!_escapeDiv) {
+      _escapeDiv = document.createElement('div');
     }
-    _escNode.textContent = t;
-    return _escNode.innerHTML;
+    _escapeDiv.textContent = text;
+    return _escapeDiv.innerHTML;
   }
 
   function escapeRegex(str) {
@@ -105,10 +110,10 @@
     const regex = new RegExp('(' + escapeRegex(query) + ')', 'gi');
     const parts = String(text).split(regex);
     return parts
-      .map(function (p) {
-        return p.toLowerCase() === query.toLowerCase()
-          ? '<mark>' + escapeHtml(p) + '</mark>'
-          : escapeHtml(p);
+      .map(function (part) {
+        return part.toLowerCase() === query.toLowerCase()
+          ? '<mark>' + escapeHtml(part) + '</mark>'
+          : escapeHtml(part);
       })
       .join('');
   }
@@ -116,15 +121,15 @@
   // ============================================================
   // 防抖
   // ============================================================
-  function debounce(fn, ms) {
+  function debounce(fn, delayMs) {
     let timer;
     return function () {
-      const ctx = this,
-        a = arguments;
+      const context = this,
+        args = arguments;
       clearTimeout(timer);
       timer = setTimeout(function () {
-        fn.apply(ctx, a);
-      }, ms);
+        fn.apply(context, args);
+      }, delayMs);
     };
   }
 
@@ -175,91 +180,92 @@
     get data() {
       return _globalData;
     },
-    set data(v) {
-      _globalData = v;
+    set data(value) {
+      _globalData = value;
     },
     get flatQs() {
       return _globalFlatQs;
     },
-    set flatQs(v) {
-      _globalFlatQs = v;
+    set flatQs(value) {
+      _globalFlatQs = value;
     },
 
     // 状态对象
     get: function () {
       return _state;
     },
-    set: function (k, v) {
-      _state[k] = v;
-      _save();
+    set: function (key, value) {
+      _state[key] = value;
+      _saveState();
     },
     setMulti: function (obj) {
-      for (const k in obj) {
-        _state[k] = obj[k];
+      for (const key in obj) {
+        _state[key] = obj[key];
       }
-      _save();
+      _saveState();
     },
 
     // 答案揭示集合
     getRevealed: function () {
       return _revealed;
     },
-    isRevealed: function (id) {
-      return _revealed.has(id);
+    isRevealed: function (questionId) {
+      return _revealed.has(questionId);
     },
-    toggleRevealed: function (id) {
-      if (_revealed.has(id)) {
-        _revealed.delete(id);
+    toggleRevealed: function (questionId) {
+      if (_revealed.has(questionId)) {
+        _revealed.delete(questionId);
       } else {
-        _revealed.add(id);
+        _revealed.add(questionId);
       }
-      _save();
+      _saveState();
     },
 
     // 错题本
-    isWrong: function (id) {
-      return !!_state.wrongBook[id];
+    isWrong: function (questionId) {
+      return !!_state.wrongBook[questionId];
     },
-    addWrong: function (id) {
-      _state.wrongBook[id] = true;
-      _save();
+    addWrong: function (questionId) {
+      _state.wrongBook[questionId] = true;
+      _saveState();
     },
-    removeWrong: function (id) {
-      delete _state.wrongBook[id];
-      _save();
+    removeWrong: function (questionId) {
+      delete _state.wrongBook[questionId];
+      _saveState();
     },
+    /** 返回错题数量（Object.keys 比维护计数器更可靠，避免溢出） */
     wrongCount: function () {
       return Object.keys(_state.wrongBook).length;
     },
     getWrongBook: function () {
       return _state.wrongBook;
     },
-    setWrongBook: function (wb) {
-      _state.wrongBook = wb;
-      _save();
+    setWrongBook: function (wrongBookObj) {
+      _state.wrongBook = wrongBookObj;
+      _saveState();
     },
 
     // 笔记 & 报错
     getLocalNotes: function () {
       return _localNotes;
     },
-    setLocalNote: function (id, c) {
-      if (c) {
-        _localNotes[id] = c;
+    setLocalNote: function (questionId, content) {
+      if (content) {
+        _localNotes[questionId] = content;
       } else {
-        delete _localNotes[id];
+        delete _localNotes[questionId];
       }
     },
     getReportedQuestions: function () {
       return _reportedQuestions;
     },
-    markReported: function (id) {
-      _reportedQuestions[id] = true;
+    markReported: function (questionId) {
+      _reportedQuestions[questionId] = true;
     },
 
     // 持久化
-    load: _load,
-    save: _save,
+    load: _loadState,
+    save: _saveState,
 
     // 工具函数
     $: getEl,

@@ -14,7 +14,7 @@
   const S = window.State;
   const R = window.Render;
   const C = S.CSS;
-  const qList = S.$('questionList');
+  const questionListEl = S.$('questionList');
   const $ = S.getEl;
   const state = S.get();
   let data = null;
@@ -22,11 +22,12 @@
   let revealed = S.getRevealed();
   const localNotes = S.getLocalNotes();
   const reportedQuestions = S.getReportedQuestions();
-  const ls = function (k) {
+  /** 安全读取 localStorage JSON，解析失败返回 null */
+  const safeLoadJSON = function (storageKey) {
     try {
-      return JSON.parse(localStorage.getItem(k));
+      return JSON.parse(localStorage.getItem(storageKey));
     } catch (e) {
-      /* silent */
+      // 数据损坏时静默处理
     }
     return null;
   };
@@ -35,45 +36,54 @@
   const esc = S.escapeHtml;
   const renderStatsChart = R.renderStatsChart;
 
-  async function loadData(ver) {
+  /**
+   * 加载指定版本的题库数据
+   * 优先尝试 gzip 压缩版（.json.gz），失败时降级到未压缩版
+   * 加载完成后构建展平列表、恢复本地错题本、拉取云端数据，然后渲染
+   */
+  async function loadData(versionName) {
     try {
       if (window.Decompress) {
-        data = await window.Decompress.fetchJSON('data/' + ver);
+        // 使用浏览器原生 DecompressionStream 解压 .json.gz
+        data = await window.Decompress.fetchJSON('data/' + versionName);
       } else {
-        const r = await fetch('data/' + ver + '.json');
-        if (!r.ok) {
-          throw new Error('HTTP ' + r.status);
+        const response = await fetch('data/' + versionName + '.json');
+        if (!response.ok) {
+          throw new Error('HTTP ' + response.status);
         }
-        data = await r.json();
+        data = await response.json();
       }
       S.data = data;
       buildFlat();
+      // 新版本加载后默认显示所有题目的答案（便于快速浏览）
       revealed.clear();
-      flatQs.forEach((q) => revealed.add(q._id));
-      state.version = ver;
-      if (ver === '外操版') {
+      flatQs.forEach((question) => revealed.add(question._id));
+      state.version = versionName;
+      if (versionName === '外操版') {
         $('verWaic').classList.add(C.ACTIVE);
         $('verNei').classList.remove(C.ACTIVE);
       } else {
         $('verNei').classList.add(C.ACTIVE);
         $('verWaic').classList.remove(C.ACTIVE);
       }
-      const wb = ls('ysk_wrong_' + ver);
-      if (wb) {
-        state.wrongBook = wb;
+      // 恢复该版本的本地错题本
+      const wrongBookData = safeLoadJSON('ysk_wrong_' + versionName);
+      if (wrongBookData) {
+        state.wrongBook = wrongBookData;
       } else {
         state.wrongBook = {};
       }
-      if (state.chapter !== 'all' && !data.chapters.find((c) => c.name === state.chapter)) {
+      // 如果之前选中的章节在新版本中不存在（跨版本章节差异），回退到「全部」
+      if (state.chapter !== 'all' && !data.chapters.find((chapter) => chapter.name === state.chapter)) {
         state.chapter = 'all';
       }
       saveState();
       // 登录状态下拉取云端错题和笔记
-      await pullCloudData(ver);
+      await pullCloudData(versionName);
       render();
-    } catch (e) {
+    } catch (error) {
       $('welcomeStats').textContent = '加载失败，请检查网络连接后刷新页面重试';
-      console.error('loadData error:', e);
+      console.error('loadData error:', error);
     }
   }
 
@@ -82,29 +92,38 @@
   // ============================================================
 
   /** 拉取云端错题本和笔记，合并到本地 */
-  async function pullCloudData(ver) {
+  async function pullCloudData(versionName) {
     if (!window.Sync || !window.SupabaseAuth || !window.SupabaseAuth.isLoggedIn()) {
       return;
     }
     try {
       // 拉取云端错题
-      const cloudWrong = await window.Sync.getWrongQuestions(ver);
+      const cloudWrong = await window.Sync.getWrongQuestions(versionName);
       if (cloudWrong && cloudWrong.length) {
-        cloudWrong.forEach(function (id) {
-          state.wrongBook[id] = true;
+        cloudWrong.forEach(function (questionId) {
+          state.wrongBook[questionId] = true;
         });
         saveState();
       }
       // 拉取云端笔记
-      const notes = await window.Sync.getNotes(ver);
+      const notes = await window.Sync.getNotes(versionName);
       if (notes) {
-        for (const k in notes) {
-          localNotes[k] = notes[k];
+        for (const noteKey in notes) {
+          localNotes[noteKey] = notes[noteKey];
         }
       }
-    } catch (e) {
-      console.error('pullCloudData error:', e);
+    } catch (error) {
+      console.error('pullCloudData error:', error);
     }
+  }
+
+  /** 直接更新笔记按钮图标，避免全量分帧重渲染 */
+  function updateNoteIcon(questionId) {
+    const card = document.querySelector('#questionList .' + C.Q_CARD + '[data-id="' + questionId + '"]');
+    if (!card) return;
+    const noteBtn = card.querySelector('.' + C.Q_NOTE_BTN);
+    if (!noteBtn) return;
+    noteBtn.textContent = (localNotes[questionId] ? '📝✏️' : '📝') + ' 笔记';
   }
 
   /** 监听认证状态变化 */
@@ -121,8 +140,8 @@
         });
       } else {
         // 登出：清除笔记缓存，保留本地错题
-        for (const k in localNotes) {
-          delete localNotes[k];
+        for (const noteKey in localNotes) {
+          delete localNotes[noteKey];
         }
         R.render();
       }
@@ -136,16 +155,21 @@
     }
   }
 
+  /**
+   * 将嵌套的题库结构（章节→题型→题目）展平为扁平数组
+   * 每道题附加合成 ID：章节_题型_序号，便于定位和筛选
+   * flatQs 同时挂载到 State.flatQs 供 renderer 使用
+   */
   function buildFlat() {
     flatQs = [];
-    let qid = 0;
-    S.data.chapters.forEach(function (ch) {
-      ch.type_groups.forEach((tg) => {
-        tg.questions.forEach((q) => {
-          q._id = ch.name + '_' + tg.type + '_' + qid++;
-          q._chapter = ch.name;
-          q._type = tg.type;
-          flatQs.push(q);
+    let questionIdCounter = 0;
+    S.data.chapters.forEach(function (chapter) {
+      chapter.type_groups.forEach((typeGroup) => {
+        typeGroup.questions.forEach((question) => {
+          question._id = chapter.name + '_' + typeGroup.type + '_' + questionIdCounter++;
+          question._chapter = chapter.name;
+          question._type = typeGroup.type;
+          flatQs.push(question);
         });
       });
     });
@@ -157,26 +181,28 @@
       return;
     }
     R.render();
-    _currentQs = R.getCurrentQs();
+    _currentQuestions = R.getCurrentQs();
   }
 
-  let _currentQs = [];
-  function renderCards(qs) {
-    _currentQs = qs;
-    R.renderCards(qs);
+  // 当前渲染的题目列表引用（供 revealAll/hideAll/笔记刷新等快速操作使用）
+  let _currentQuestions = [];
+  /** 渲染卡片并更新当前列表引用 */
+  function renderCards(questions) {
+    _currentQuestions = questions;
+    R.renderCards(questions);
   }
 
   /** 云端记录答题结果（仅登录用户） */
-  function logAnswer(q, isCorrect) {
+  function logAnswer(question, isCorrect) {
     if (!window.Sync || !window.SupabaseAuth || !window.SupabaseAuth.isLoggedIn()) {
       return;
     }
-    const id = q._id;
-    window.Sync.recordAnswer(state.version, id, q._chapter, q._type, isCorrect);
+    const questionId = question._id;
+    window.Sync.recordAnswer(state.version, questionId, question._chapter, question._type, isCorrect);
     if (!isCorrect) {
-      window.Sync.addWrongQuestion(state.version, id, q._chapter, q._type);
-    } else if (state.wrongBook[id]) {
-      window.Sync.removeWrongQuestion(state.version, id);
+      window.Sync.addWrongQuestion(state.version, questionId, question._chapter, question._type);
+    } else if (state.wrongBook[questionId]) {
+      window.Sync.removeWrongQuestion(state.version, questionId);
     }
   }
 
@@ -219,7 +245,7 @@
           }
         }
         modal.style.display = 'none';
-        renderCards(_currentQs); // 刷新笔记图标
+        updateNoteIcon(questionId);
       } finally {
         saveBtn.disabled = false;
         saveBtn.textContent = '💾 保存';
@@ -241,7 +267,7 @@
             await window.Sync.deleteNote(state.version, questionId);
           }
           modal.style.display = 'none';
-          renderCards(_currentQs);
+          updateNoteIcon(questionId);
         } finally {
           saveBtn.disabled = false;
           saveBtn.textContent = '💾 保存';
@@ -289,8 +315,8 @@
     modal.dataset.questionId = questionId;
     modal.style.display = 'flex';
     // 清除上次选择
-    modal.querySelectorAll('input[name="reportReason"]').forEach(function (r) {
-      r.checked = false;
+    modal.querySelectorAll('input[name="reportReason"]').forEach(function (radioBtn) {
+      radioBtn.checked = false;
     });
     $('reportDetail').value = '';
     $('reportMsg').textContent = '';
@@ -387,41 +413,41 @@
     });
 
     fetch('data/changelog.json')
-      .then(function (r) {
-        if (!r.ok) {
-          throw new Error('HTTP ' + r.status);
+      .then(function (response) {
+        if (!response.ok) {
+          throw new Error('HTTP ' + response.status);
         }
-        return r.json();
+        return response.json();
       })
-      .then(function (data) {
-        const commits = data && data.commits;
+      .then(function (changelogData) {
+        const commits = changelogData && changelogData.commits;
         if (!commits || !commits.length) {
           return;
         }
 
         let html = '';
         for (let i = 0; i < commits.length; i++) {
-          const c = commits[i];
+          const commit = commits[i];
           html +=
             '<div class="changelog-entry">' +
             '<div class="changelog-date">' +
-            esc(c.date) +
+            esc(commit.date) +
             '</div>' +
             '<div class="changelog-msg">' +
-            esc(c.message) +
+            esc(commit.message) +
             '</div>' +
             '</div>';
         }
         body.innerHTML = html;
 
         const latestHash = commits[0].hash;
-        let seen = null;
+        let seenHash = null;
         try {
-          seen = localStorage.getItem('ysk_changelog_seen');
+          seenHash = localStorage.getItem('ysk_changelog_seen');
         } catch (e) {
           /* silent */
         }
-        if (seen !== latestHash) {
+        if (seenHash !== latestHash) {
           pendingHash = latestHash;
           modal.style.display = 'flex';
         }
@@ -443,11 +469,11 @@
     doSearch();
   });
   const doSearch = S.debounce(function () {
-    const v = $('searchInput').value.trim();
-    $('searchClear').style.display = v ? 'inline' : 'none';
-    state.searchQuery = v;
-    state.mode = v ? 'search' : 'browse';
-    if (v) {
+    const searchValue = $('searchInput').value.trim();
+    $('searchClear').style.display = searchValue ? 'inline' : 'none';
+    state.searchQuery = searchValue;
+    state.mode = searchValue ? 'search' : 'browse';
+    if (searchValue) {
       state.chapter = 'all';
     }
     state.type = 'all';
@@ -473,15 +499,15 @@
   // Stats modal（支持登录用户拉取云端统计 + Chart.js 图表）
   // ============================================================
   $('statsBtn').addEventListener('click', async function () {
-    const total = flatQs.length;
-    const wrong = Object.keys(state.wrongBook).length;
+    const totalQuestions = flatQs.length;
+    const wrongCount = Object.keys(state.wrongBook).length;
     const isLoggedIn = window.SupabaseAuth && window.SupabaseAuth.isLoggedIn();
 
     let statsHtml = `
     <div class="stat-row"><span class="stat-label">题库版本</span><span class="stat-value">${state.version}</span></div>
-    <div class="stat-row"><span class="stat-label">总题数</span><span class="stat-value">${total}</span></div>
+    <div class="stat-row"><span class="stat-label">总题数</span><span class="stat-value">${totalQuestions}</span></div>
     <div class="stat-row"><span class="stat-label">章节数</span><span class="stat-value">${data.chapters.length}</span></div>
-    <div class="stat-row"><span class="stat-label">错题数</span><span class="stat-value">${wrong}</span></div>
+    <div class="stat-row"><span class="stat-label">错题数</span><span class="stat-value">${wrongCount}</span></div>
     <div class="stat-row"><span class="stat-label">已显示答案</span><span class="stat-value">${revealed.size}</span></div>
   `;
 
@@ -532,16 +558,48 @@
     render();
   });
 
-  $('revealAllBtn').addEventListener('click', () => {
-    _currentQs.forEach((q) => revealed.add(q._id));
+  function revealAllCards() {
+    _currentQuestions.forEach(function (question) { revealed.add(question._id); });
+    // 直接操作已渲染的 DOM 卡片，避免全量重渲染
+    document.querySelectorAll('#questionList .' + C.Q_CARD).forEach(function (cardEl) {
+      let cardId = cardEl.dataset.id;
+      if (!cardId) return;
+      let answerDiv = cardEl.querySelector('.' + C.Q_ANSWER);
+      if (answerDiv) answerDiv.classList.add(C.VISIBLE);
+      let answerBtn = cardEl.querySelector('.' + C.Q_SHOW_ANSWER_BTN);
+      if (answerBtn) answerBtn.textContent = '隐藏答案';
+      // 标记正确选项
+      let question = flatQs.find(function (x) { return x._id === cardId; });
+      if (question && question.options && question.options.length > 0 && question.answer) {
+        cardEl.querySelectorAll('.' + C.OPT_ROW).forEach(function (optionRow) {
+          if (optionRow.dataset.letter && question.answer.toUpperCase() === optionRow.dataset.letter) {
+            optionRow.classList.add(C.REVEALED);
+          }
+        });
+      }
+    });
     saveState();
-    renderCards(_currentQs);
-  });
-  $('hideAllBtn').addEventListener('click', () => {
-    _currentQs.forEach((q) => revealed.delete(q._id));
+    R.updateTopActions();
+  }
+  $('revealAllBtn').addEventListener('click', revealAllCards);
+  function hideAllCards() {
+    _currentQuestions.forEach(function (question) { revealed.delete(question._id); });
+    // 直接操作已渲染的 DOM 卡片，避免全量重渲染
+    document.querySelectorAll('#questionList .' + C.Q_CARD).forEach(function (cardEl) {
+      let cardId = cardEl.dataset.id;
+      if (!cardId) return;
+      let answerDiv = cardEl.querySelector('.' + C.Q_ANSWER);
+      if (answerDiv) answerDiv.classList.remove(C.VISIBLE);
+      let answerBtn = cardEl.querySelector('.' + C.Q_SHOW_ANSWER_BTN);
+      if (answerBtn) answerBtn.textContent = '显示答案';
+      cardEl.querySelectorAll('.' + C.OPT_ROW).forEach(function (optionRow) {
+        optionRow.classList.remove(C.REVEALED, C.WRONG);
+      });
+    });
     saveState();
-    renderCards(_currentQs);
-  });
+    R.updateTopActions();
+  }
+  $('hideAllBtn').addEventListener('click', hideAllCards);
 
   // Shared helper: reset all view filters (used by both entry paths)
   function resetViewState() {
@@ -552,13 +610,13 @@
     $('searchInput').value = '';
   }
 
-  // Version switch (header buttons)
-  function switchVersion(ver) {
-    if (state.version === ver) {
-      return;
+  // 版本切换（顶部导航栏按钮），重置所有筛选条件后加载新版本
+  function switchVersion(versionName) {
+    if (state.version === versionName) {
+      return;  // 已经是该版本，无需切换
     }
     resetViewState();
-    loadData(ver);
+    loadData(versionName);
   }
 
   $('verWaic').addEventListener('click', function () {
@@ -567,24 +625,26 @@
   $('verNei').addEventListener('click', function () {
     switchVersion('内操版');
   });
-  // ===== Entry Overlay =====
+  // ============================================================
+  // 入口遮罩：首次访问时显示版本选择界面
+  // ============================================================
   (function initOverlay() {
     const overlay = document.getElementById('entryOverlay');
     if (!overlay) {
       return;
     }
 
-    const cards = overlay.querySelectorAll('.overlay-card');
+    const overlayCards = overlay.querySelectorAll('.overlay-card');
 
-    function handleVersionSelect(ver) {
-      state.version = ver;
+    function handleVersionSelect(versionName) {
+      state.version = versionName;
       resetViewState();
 
       overlay.classList.add(C.EXIT);
-      overlay.querySelectorAll('.' + C.OVERLAY_CARD).forEach((c) => (c.style.pointerEvents = 'none'));
+      overlay.querySelectorAll('.' + C.OVERLAY_CARD).forEach((cardEl) => (cardEl.style.pointerEvents = 'none'));
 
       setTimeout(() => {
-        loadData(ver);
+        loadData(versionName);
       }, 100);
 
       setTimeout(() => {
@@ -593,8 +653,8 @@
       }, 650);
     }
 
-    cards.forEach((card) => {
-      card.addEventListener('click', function (e) {
+    overlayCards.forEach((cardEl) => {
+      cardEl.addEventListener('click', function (e) {
         if (this.classList.contains(C.CLICKED)) {
           return;
         }
@@ -619,22 +679,22 @@
   // ============================================================
   // 事件委托：卡片内交互（避免全量重渲染）
   // ============================================================
-  qList.addEventListener('click', function (e) {
+  questionListEl.addEventListener('click', function (e) {
     // 显示/隐藏答案按钮
-    const btn = e.target.closest('.' + C.Q_SHOW_ANSWER_BTN);
-    if (btn) {
+    const showAnswerBtn = e.target.closest('.' + C.Q_SHOW_ANSWER_BTN);
+    if (showAnswerBtn) {
       e.stopPropagation();
-      const id = btn.dataset.id;
-      const card = btn.closest('.' + C.Q_CARD);
+      const questionId = showAnswerBtn.dataset.id;
+      const card = showAnswerBtn.closest('.' + C.Q_CARD);
       const answerDiv = card.querySelector('.' + C.Q_ANSWER);
-      if (revealed.has(id)) {
-        revealed.delete(id);
+      if (revealed.has(questionId)) {
+        revealed.delete(questionId);
         answerDiv.classList.remove(C.VISIBLE);
-        btn.textContent = '显示答案';
+        showAnswerBtn.textContent = '显示答案';
       } else {
-        revealed.add(id);
+        revealed.add(questionId);
         answerDiv.classList.add(C.VISIBLE);
-        btn.textContent = '隐藏答案';
+        showAnswerBtn.textContent = '隐藏答案';
       }
       saveState();
       R.updateTopActions();
@@ -642,42 +702,42 @@
     }
 
     // 选择题选项点击
-    const opt = e.target.closest('.' + C.OPT_ROW);
-    if (opt) {
-      const card = opt.closest('.' + C.Q_CARD);
-      const id = card.dataset.id;
-      if (revealed.has(id)) {
-        return;
+    const optionRow = e.target.closest('.' + C.OPT_ROW);
+    if (optionRow) {
+      const card = optionRow.closest('.' + C.Q_CARD);
+      const questionId = card.dataset.id;
+      if (revealed.has(questionId)) {
+        return;  // 已显示答案，忽略选项点击
       }
-      const letter = opt.dataset.letter;
-      const q = flatQs.find(function (x) {
-        return x._id === id;
+      const selectedLetter = optionRow.dataset.letter;
+      const question = flatQs.find(function (x) {
+        return x._id === questionId;
       });
-      if (!q) {
+      if (!question) {
         return;
       }
-      const hasAnswer = q.answer && q.answer.trim() !== '';
-      const correct = hasAnswer && q.answer.toUpperCase() === letter;
-      card.querySelectorAll('.' + C.OPT_ROW).forEach(function (o) {
-        const l = o.dataset.letter;
-        if (hasAnswer && l === q.answer) {
-          o.classList.add(C.REVEALED);
-        } else if (o === opt && !correct) {
-          o.classList.add(C.WRONG);
+      const hasAnswer = question.answer && question.answer.trim() !== '';
+      const isCorrect = hasAnswer && question.answer.toUpperCase() === selectedLetter;
+      card.querySelectorAll('.' + C.OPT_ROW).forEach(function (optionRowEl) {
+        const optionLetter = optionRowEl.dataset.letter;
+        if (hasAnswer && optionLetter === question.answer) {
+          optionRowEl.classList.add(C.REVEALED);
+        } else if (optionRowEl === optionRow && !isCorrect) {
+          optionRowEl.classList.add(C.WRONG);
         }
       });
       card.querySelector('.' + C.Q_ANSWER).classList.add(C.VISIBLE);
-      revealed.add(id);
+      revealed.add(questionId);
       if (hasAnswer) {
-        if (!correct) {
-          state.wrongBook[id] = true;
+        if (!isCorrect) {
+          state.wrongBook[questionId] = true;
         } else {
-          delete state.wrongBook[id];
+          delete state.wrongBook[questionId];
         }
       }
       saveState();
       R.updateTopActions();
-      logAnswer(q, correct);
+      logAnswer(question, isCorrect);
       return;
     }
 
@@ -698,9 +758,12 @@
     }
   });
 
-  // Init
+  // ============================================================
+  // 初始化：恢复上次状态 + 启动认证监听
+  // ============================================================
   loadState();
-  revealed = S.getRevealed();  // sync reference after _load() may replace the Set
+  // loadState() 可能从 localStorage 重建了 _revealed Set，需同步引用
+  revealed = S.getRevealed();
   // 启动认证状态监听
   initAuthSync();
 })();

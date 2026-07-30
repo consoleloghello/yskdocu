@@ -111,7 +111,8 @@
     }
   }
 
-  // ========== p5.js 草图（实例模式） ==========
+  // ========== p5.js 草图（实例模式）：避免全局变量污染 ==========
+  // 使用 instance mode 而非全局模式，p5 变量封闭在闭包内
   const sketch = function (p) {
     p5inst = p;
 
@@ -183,12 +184,13 @@
       p.pop();
     };
 
-    // 窗口大小变化时重新适应
+    // 窗口大小变化时重新适应画布尺寸并重置矢量场
     p.windowResized = function () {
       const container = document.getElementById('p5bg');
       const w = container.offsetWidth || window.innerWidth;
       const h = container.offsetHeight || window.innerHeight;
       p.resizeCanvas(w, h);
+      // 重新计算网格维度并重建矢量场
       cols = Math.floor(w / scl) + 1;
       rows = Math.floor(h / scl) + 1;
       flowField = new Array(cols * rows);

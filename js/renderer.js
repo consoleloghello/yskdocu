@@ -4,50 +4,63 @@
     throw new Error('state.js must be loaded before renderer.js');
   }
 
-  let _currentQuestions = [];
+  let _currentQuestionList = [];
 
-  function getCurrentQs() {
-    const st = State.get();
-    const fqs = State.flatQs;
-    if (st.mode === 'wrong') {
-      return fqs.filter(function (q) {
-        return State.isWrong(q._id);
+  /**
+   * 根据当前状态（模式/章节/题型/搜索词）筛选并返回当前要显示的题目列表
+   * 优先级：错题模式 → 搜索 → 章节 → 题型
+   */
+  function getCurrentQuestions() {
+    const appState = State.get();
+    const flatQuestionList = State.flatQs;
+    if (appState.mode === 'wrong') {
+      return flatQuestionList.filter(function (question) {
+        return State.isWrong(question._id);
       });
     }
-    let list = st.searchQuery
-      ? searchIn(fqs, st.searchQuery)
-      : st.chapter === 'all'
-        ? fqs
-        : fqs.filter(function (q) {
-            return q._chapter === st.chapter;
+    let filtered = appState.searchQuery
+      ? searchIn(flatQuestionList, appState.searchQuery)
+      : appState.chapter === 'all'
+        ? flatQuestionList
+        : flatQuestionList.filter(function (question) {
+            return question._chapter === appState.chapter;
           });
-    if (st.type !== 'all') {
-      list = list.filter(function (q) {
-        return q._type === st.type;
+    if (appState.type !== 'all') {
+      filtered = filtered.filter(function (question) {
+        return question._type === appState.type;
       });
     }
-    return list;
+    return filtered;
   }
 
-  function searchIn(arr, query) {
-    const q = query.toLowerCase();
-    return arr.filter(function (item) {
+  /**
+   * 全字段模糊搜索：匹配题目文本、答案、章节名、题型和选项
+   * 支持搜索关键词自动转为小写实现大小写不敏感
+   */
+  function searchIn(items, query) {
+    const lowerQuery = query.toLowerCase();
+    return items.filter(function (item) {
       return [item.question, item.answer, item._chapter, item._type]
         .concat(item.options || [])
         .join(' ')
         .toLowerCase()
-        .includes(q);
+        .includes(lowerQuery);
     });
   }
 
-  function countByType(arr) {
-    const m = {};
-    arr.forEach(function (q) {
-      m[q._type] = (m[q._type] || 0) + 1;
+  /** 按题型统计题目数量 */
+  function countByType(items) {
+    const typeCounts = {};
+    items.forEach(function (question) {
+      typeCounts[question._type] = (typeCounts[question._type] || 0) + 1;
     });
-    return m;
+    return typeCounts;
   }
 
+  /**
+   * 主渲染入口：依次渲染章节导航、题型筛选、顶部统计，最后渲染题目卡片列表
+   * 空结果时显示欢迎/提示信息而非空白页
+   */
   function render() {
     if (!State.data) {
       return;
@@ -55,10 +68,11 @@
     renderChapters();
     renderTypeFilters();
     updateStats();
-    const qs = getCurrentQs();
+    const questions = getCurrentQuestions();
     const $ = State.getEl;
-    $('topActions').style.display = qs.length ? 'flex' : 'none';
-    if (qs.length === 0) {
+    $('topActions').style.display = questions.length ? 'flex' : 'none';
+    if (questions.length === 0) {
+      // 无结果时的友好提示：区分搜索无匹配、错题本为空、和初始浏览三种场景
       $('welcome').style.display = 'block';
       $('questionList').style.display = 'none';
       if (State.get().searchQuery) {
@@ -77,221 +91,240 @@
     }
     $('welcome').style.display = 'none';
     $('questionList').style.display = 'block';
-    renderCards(qs);
+    renderCardList(questions);
   }
 
+  /** 渲染横向滚动的章节导航 chip 按钮，激活项自动滚动到可视区域 */
   function renderChapters() {
-    const el = State.$('chapterList');
-    const st = State.get();
-    const chShow = st.mode === 'wrong' ? 'all' : st.chapter;
+    const chapterListEl = State.$('chapterList');
+    const appState = State.get();
+    // 错题模式下强制显示「全部」，不允许按章节筛选
+    const activeChapterName = appState.mode === 'wrong' ? 'all' : appState.chapter;
     const C = State.CSS;
-    let h =
-      '<button class="' + C.CHIP + ' ' + (chShow === 'all' ? C.ACTIVE : '') + '" data-ch="all">全部<span class="' + C.COUNT + '">' + State.flatQs.length + '</span></button>';
-      State.data.chapters.forEach(function (ch) {
-        const cnt = ch.type_groups.reduce(function (s, g) {
-        return s + g.questions.length;
+    let html =
+      '<button class="' + C.CHIP + ' ' + (activeChapterName === 'all' ? C.ACTIVE : '') + '" data-ch="all">全部<span class="' + C.COUNT + '">' + State.flatQs.length + '</span></button>';
+      State.data.chapters.forEach(function (chapter) {
+        const questionCount = chapter.type_groups.reduce(function (sum, group) {
+        return sum + group.questions.length;
       }, 0);
-      h +=
-        '<button class="' + C.CHIP + ' ' + (chShow === ch.name ? C.ACTIVE : '') + '" data-ch="' + ch.name +  '">' + ch.name + '<span class="' + C.COUNT + '">' + cnt + '</span></button>';
+      html +=
+        '<button class="' + C.CHIP + ' ' + (activeChapterName === chapter.name ? C.ACTIVE : '') + '" data-ch="' + chapter.name +  '">' + chapter.name + '<span class="' + C.COUNT + '">' + questionCount + '</span></button>';
     });
-    el.innerHTML = h;
-    el.querySelectorAll('.' + C.CHIP).forEach(function (el2) {
+    chapterListEl.innerHTML = html;
+    chapterListEl.querySelectorAll('.' + C.CHIP).forEach(function (buttonEl) {
       // 滑动到激活的按钮
-      if (el2.className == C.CHIP + " " + C.ACTIVE) {
-        el2.scrollIntoView({behavior:"smooth",block:"nearest",inline:"center"});
+      if (buttonEl.className == C.CHIP + " " + C.ACTIVE) {
+        buttonEl.scrollIntoView({behavior:"smooth",block:"nearest",inline:"center"});
       }
-      el2.addEventListener('click', function () {
-        State.setMulti({ chapter: el2.dataset.ch, type: 'all', mode: 'browse', searchQuery: '' });
+      buttonEl.addEventListener('click', function () {
+        State.setMulti({ chapter: buttonEl.dataset.ch, type: 'all', mode: 'browse', searchQuery: '' });
         State.$('searchInput').value = '';
-        el2.scrollIntoView({behavior:"smooth",block:"nearest",inline:"center"});
+        buttonEl.scrollIntoView({behavior:"smooth",block:"nearest",inline:"center"});
         render();
       });
     });
   }
 
+  /** 渲染题型筛选按钮组，当只有一种题型时自动隐藏（无需筛选） */
   function renderTypeFilters() {
-    const el = State.$('typeFilters');
-    const st = State.get();
+    const typeFilterEl = State.$('typeFilters');
+    const appState = State.get();
     const C = State.CSS;
-    let base;
-    if (st.mode === 'wrong') {
-      base = State.flatQs.filter(function (q) {
-        return State.isWrong(q._id);
+    // 根据当前模式/搜索/章节计算题型分布
+    let filteredQuestions;
+    if (appState.mode === 'wrong') {
+      filteredQuestions = State.flatQs.filter(function (question) {
+        return State.isWrong(question._id);
       });
     } else {
-      base = st.searchQuery
-        ? searchIn(State.flatQs, st.searchQuery)
-        : st.chapter === 'all'
-          ? State.flatQs
-          : State.flatQs.filter(function (q) {
-              return q._chapter === st.chapter;
-            });
+      filteredQuestions = appState.searchQuery ? searchIn(State.flatQs, appState.searchQuery) : appState.chapter === 'all' ? State.flatQs : State.flatQs.filter(function (question) {
+        return question._chapter === appState.chapter;
+      });
     }
-    const types = countByType(base);
-    const order = State.QUESTION_TYPES;
-    const sorted = order.filter(function (t) {
-      return types[t];
+    const typeCounts = countByType(filteredQuestions);
+    const typeOrder = State.QUESTION_TYPES;
+    const sortedTypes = typeOrder.filter(function (typeName) {
+      return typeCounts[typeName];
     });
-    const total = base.length;
-    if (sorted.length <= 1 && st.type === 'all') {
-      el.style.display = 'none';
+    const totalQuestions = filteredQuestions.length;
+    if (sortedTypes.length <= 1 && appState.type === 'all') {
+      typeFilterEl.style.display = 'none';
       return;
     }
-    el.style.display = 'flex';
-    let h =
+    typeFilterEl.style.display = 'flex';
+    let html =
       '<button class="' + C.TYPE_BTN + ' ' +
-      (st.type === 'all' ? C.ACTIVE : '') +
+      (appState.type === 'all' ? C.ACTIVE : '') +
       '" data-type="all">全部 <span class="' + C.COUNT + '">' +
-      total +
+      totalQuestions +
       '</span></button>';
-    sorted.forEach(function (t) {
-      h +=
+    sortedTypes.forEach(function (typeName) {
+      html +=
         '<button class="' + C.TYPE_BTN + ' ' +
-        (st.type === t ? C.ACTIVE : '') +
+        (appState.type === typeName ? C.ACTIVE : '') +
         '" data-type="' +
-        t +
+        typeName +
         '">' +
-        t +
+        typeName +
         ' <span class="' + C.COUNT + '">' +
-        types[t] +
+        typeCounts[typeName] +
         '</span></button>';
     });
-    el.innerHTML = h;
-    el.querySelectorAll('.' + C.TYPE_BTN).forEach(function (el2) {
+    typeFilterEl.innerHTML = html;
+    typeFilterEl.querySelectorAll('.' + C.TYPE_BTN).forEach(function (buttonEl) {
       // 滑动到激活的按钮
-      if (el2.className == C.TYPE_BTN + " " + C.ACTIVE) {
-        el2.scrollIntoView({behavior:"smooth",block:"nearest",inline:"center"});
+      if (buttonEl.className == C.TYPE_BTN + " " + C.ACTIVE) {
+        buttonEl.scrollIntoView({behavior:"smooth",block:"nearest",inline:"center"});
       }
-      el2.addEventListener('click', function () {
-        State.set('type', el2.dataset.type);
-        el2.scrollIntoView({behavior:"smooth",block:"nearest",inline:"center"});
+      buttonEl.addEventListener('click', function () {
+        State.set('type', buttonEl.dataset.type);
+        buttonEl.scrollIntoView({behavior:"smooth",block:"nearest",inline:"center"});
         render();
       });
     });
   }
 
-  function renderCards(qs) {
-    _currentQuestions = qs;
-    const st = State.get();
+  let _renderVersion = 0;
+
+  function renderCardList(questions) {
+    _currentQuestionList = questions;
+    const appState = State.get();
     const C = State.CSS;
-    const isSearch = st.searchQuery !== '';
+    const isSearchMode = appState.searchQuery !== '';
     const isLoggedIn = window.SupabaseAuth && window.SupabaseAuth.isLoggedIn();
     const $ = State.getEl;
     const highlightText = State.highlightText;
-    let h =
+    const container = $('questionList');
+
+    // 先写入列表头部（快速显示，用户立刻看到总题数）
+    container.innerHTML =
       '<div id="listInfo" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
       '<span style="font-size:13px;color:var(--text2)">共 ' +
-      qs.length +
+      questions.length +
       ' 题' +
-      (isSearch ? ' (搜索结果)' : '') +
+      (isSearchMode ? ' (搜索结果)' : '') +
       '</span>' +
       '<span style="font-size:12px;color:var(--text2)">点击选项/按钮显示答案</span></div>';
-    qs.forEach(function (q, idx) {
-      const isRevealed = State.isRevealed(q._id);
-      const isWrong = State.isWrong(q._id);
+
+    if (questions.length === 0) {
+      updateTopActions();
+      return;
+    }
+
+    // 分帧渲染：每帧渲染 CHUNK 道题，避免卡顿
+    _renderVersion++;
+    const currentVersion = _renderVersion;
+    const CHUNK_SIZE = 24; // 每帧渲染题数，可调
+    let cardIndex = 0;
+
+    /**
+     * 构建单道题目的完整 HTML 字符串
+     * @param {object} question - 题目对象（flatQs 中的条目）
+     * @param {number} position - 在列表中的位置（用于显示题号）
+     */
+    function buildCardHtml(question, position) {
+      const isRevealed = State.isRevealed(question._id);
+      const isWrong = State.isWrong(question._id);
       const notes = State.getLocalNotes();
-      const hasNote = notes[q._id];
-      h +=
-        '<div class="' + C.Q_CARD + '" data-id="' +
-        q._id +
-        '">' +
-        '<div class="' + C.Q_CARD_HEADER + '"><span class="' + C.Q_TYPE_BADGE + '">' +
-        q._type +
-        '</span><span class="' + C.Q_CHAPTER_LABEL + '">' +
-        q._chapter +
-        ' · #' +
-        (idx + 1) +
-        '</span></div>' +
-        '<div class="' + C.Q_TEXT + '">' +
-        highlightText(q.question, st.searchQuery) +
-        '</div>';
-      if (q.options && q.options.length > 0) {
-        h += '<div class="' + C.Q_OPTIONS + '">';
-        q.options.forEach(function (opt, oi) {
-          const letter = String.fromCharCode(65 + oi);
-          const correct = q.answer && q.answer.toUpperCase() === letter;
-          let cls = C.OPT_ROW;
-          if (isRevealed && correct) {
-            cls += ' ' + C.REVEALED;
-          }
-          if (isRevealed && !correct && isWrong) {
-            cls += ' ' + C.WRONG;
-          }
-          h +=
-            '<div class="' +
-            cls +
-            '" data-letter="' +
-            letter +
-            '">' +
-            highlightText(opt, st.searchQuery) +
-            '</div>';
+      const hasNote = notes[question._id];
+      let html = '';
+
+      // 卡片头部：题型标签 + 章节名 + 题号
+      html += '<div class="' + C.Q_CARD + '" data-id="' + question._id + '">' +
+        '<div class="' + C.Q_CARD_HEADER + '"><span class="' + C.Q_TYPE_BADGE + '">' + question._type +
+        '</span><span class="' + C.Q_CHAPTER_LABEL + '">' + question._chapter + ' · #' + (position + 1) + '</span></div>' +
+        '<div class="' + C.Q_TEXT + '">' + highlightText(question.question, appState.searchQuery) + '</div>';
+
+      // 选择题选项区域（65 对应 ASCII 'A'）
+      if (question.options && question.options.length > 0) {
+        html += '<div class="' + C.Q_OPTIONS + '">';
+        question.options.forEach(function (optionText, optionIndex) {
+          const letter = String.fromCharCode(65 + optionIndex);
+          const isCorrect = question.answer && question.answer.toUpperCase() === letter;
+          let cssClass = C.OPT_ROW;
+          if (isRevealed && isCorrect) cssClass += ' ' + C.REVEALED;
+          if (isRevealed && !isCorrect && isWrong) cssClass += ' ' + C.WRONG;
+          html += '<div class="' + cssClass + '" data-letter="' + letter + '">' + highlightText(optionText, appState.searchQuery) + '</div>';
         });
-        h += '</div>';
+        html += '</div>';
       }
-      const isDirect = State.DIRECT_TYPES.indexOf(q._type) >= 0;
-      let ansHtml = '';
-      if (q._type === '判断题') {
-        ansHtml = q.answer === '√' ? '正确 ✓' : '错误 ✗';
-      } else if (q._type === '选择题') {
-        ansHtml = q.answer ? '正确答案：' + q.answer : '⚠ 答案未标注';
+
+      // 参考答案区域：不同题型的显示格式不同
+      const isDirectType = State.DIRECT_TYPES.indexOf(question._type) >= 0;
+      let answerHtml = '';
+      if (question._type === '判断题') {
+        answerHtml = question.answer === '√' ? '正确 ✓' : '错误 ✗';
+      } else if (question._type === '选择题') {
+        answerHtml = question.answer ? '正确答案：' + question.answer : '⚠ 答案未标注';
       } else {
-        ansHtml = q.answer || '⚠ 答案未解析';
+        answerHtml = question.answer || '⚠ 答案未解析';
       }
-      const showAns = isDirect || isRevealed;
-      h +=
-        '<div class="' + C.Q_ANSWER + ' ' +
-        (showAns ? C.VISIBLE : '') +
-        '"><div class="' + C.LABEL + '">📝 参考答案</div>' +
-        highlightText(ansHtml, st.searchQuery) +
-        '</div>';
-      if (!isDirect) {
-        h +=
-          '<button class="' + C.Q_SHOW_ANSWER_BTN + '" data-id="' +
-          q._id +
-          '">' +
-          (isRevealed ? '隐藏答案' : '显示答案') +
-          '</button>';
+      const showAnswer = isDirectType || isRevealed;
+      html += '<div class="' + C.Q_ANSWER + ' ' + (showAnswer ? C.VISIBLE : '') + '"><div class="' + C.LABEL + '">📝 参考答案</div>' +
+        highlightText(answerHtml, appState.searchQuery) + '</div>';
+
+      // 简答/实操/应急处理等题型默认显示答案，不需要显示/隐藏按钮
+      if (!isDirectType) {
+        html += '<button class="' + C.Q_SHOW_ANSWER_BTN + '" data-id="' + question._id + '">' +
+          (isRevealed ? '隐藏答案' : '显示答案') + '</button>';
       }
+
+      // 登录用户额外显示笔记和报错按钮
       if (isLoggedIn) {
-        h +=
-          '<div class="' + C.Q_ACTIONS + '">' +
-          '<button class="' + C.Q_ACTION_BTN + ' ' + C.Q_NOTE_BTN + '" data-id="' +
-          q._id +
-          '">' +
-          (hasNote ? '📝✏️' : '📝') +
-          ' 笔记</button>' +
-          '<button class="' + C.Q_ACTION_BTN + ' ' + C.Q_REPORT_BTN + '" data-id="' +
-          q._id +
-          '">🐛 报错</button></div>';
+        html += '<div class="' + C.Q_ACTIONS + '">' +
+          '<button class="' + C.Q_ACTION_BTN + ' ' + C.Q_NOTE_BTN + '" data-id="' + question._id + '">' +
+          (hasNote ? '📝✏️' : '📝') + ' 笔记</button>' +
+          '<button class="' + C.Q_ACTION_BTN + ' ' + C.Q_REPORT_BTN + '" data-id="' + question._id + '">🐛 报错</button></div>';
       }
-      h += '</div>';
-    });
-    $('questionList').innerHTML = h;
-    updateTopActions();
+
+      html += '</div>';
+      return html;
+    }
+
+    function renderChunk() {
+      // 如果新一轮渲染已启动，取消本次未完成的旧渲染
+      if (_renderVersion !== currentVersion) return;
+
+      const end = Math.min(cardIndex + CHUNK_SIZE, questions.length);
+      let chunkHtml = '';
+      for (; cardIndex < end; cardIndex++) {
+        chunkHtml += buildCardHtml(questions[cardIndex], cardIndex);
+      }
+      container.insertAdjacentHTML('beforeend', chunkHtml);
+
+      if (cardIndex < questions.length) {
+        requestAnimationFrame(renderChunk);
+      } else {
+        updateTopActions();
+      }
+    }
+
+    requestAnimationFrame(renderChunk);
   }
 
   /** 云端记录答题结果（仅登录用户） */
-  function logAnswer(q, isCorrect) {
+  function logAnswer(question, isCorrect) {
     if (!window.Sync || !window.SupabaseAuth || !window.SupabaseAuth.isLoggedIn()) {
       return;
     }
-    window.Sync.recordAnswer(State.get().version, q._id, q._chapter, q._type, isCorrect);
+    window.Sync.recordAnswer(State.get().version, question._id, question._chapter, question._type, isCorrect);
     if (!isCorrect) {
-      window.Sync.addWrongQuestion(State.get().version, q._id, q._chapter, q._type);
-    } else if (State.isWrong(q._id)) {
-      window.Sync.removeWrongQuestion(State.get().version, q._id);
+      window.Sync.addWrongQuestion(State.get().version, question._id, question._chapter, question._type);
+    } else if (State.isWrong(question._id)) {
+      window.Sync.removeWrongQuestion(State.get().version, question._id);
     }
   }
 
+  /** 更新顶部操作按钮的状态：错题数量、全部显示/全部隐藏按钮的可见性 */
   function updateTopActions() {
-    const wc = State.wrongCount();
-    State.$('wrongBookBtn').textContent = '❌ 错题 (' + wc + ')';
-    const shown = _currentQuestions.filter(function (q) {
-      return State.isRevealed(q._id);
+    const wrongCount = State.wrongCount();
+    State.$('wrongBookBtn').textContent = '❌ 错题 (' + wrongCount + ')';
+    const revealedCount = _currentQuestionList.filter(function (question) {
+      return State.isRevealed(question._id);
     }).length;
-    const total = _currentQuestions.length;
-    State.$('revealAllBtn').style.display = shown < total ? 'inline-block' : 'none';
-    State.$('hideAllBtn').style.display = shown > 0 ? 'inline-block' : 'none';
+    const totalQuestions = _currentQuestionList.length;
+    State.$('revealAllBtn').style.display = revealedCount < totalQuestions ? 'inline-block' : 'none';
+    State.$('hideAllBtn').style.display = revealedCount > 0 ? 'inline-block' : 'none';
   }
 
   function updateStats() {
@@ -307,7 +340,7 @@
       ' 道';
   }
 
-  /** 渲染统计饼图 */
+  /** 使用 Chart.js 渲染答题统计饼图 */
   function renderStatsChart(cloudStats) {
     if (typeof window.Chart === 'undefined') {
       return;
@@ -316,19 +349,20 @@
     if (!canvas) {
       return;
     }
+    // 销毁旧实例，防止多次打开弹窗时图表叠加
     if (canvas._chart) {
       canvas._chart.destroy();
     }
-    const correct = (cloudStats && cloudStats.correct) || 0;
-    const wrong = (cloudStats && cloudStats.wrong) || 0;
-    if (correct === 0 && wrong === 0) {
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.font = '13px -apple-system, BlinkMacSystemFont, sans-serif';
-        ctx.fillStyle = '#94a3b8';
-        ctx.textAlign = 'center';
-        ctx.fillText('暂无答题记录', canvas.width / 2, canvas.height / 2);
+    const correctCount = (cloudStats && cloudStats.correct) || 0;
+    const wrongCount = (cloudStats && cloudStats.wrong) || 0;
+    if (correctCount === 0 && wrongCount === 0) {
+      const context2d = canvas.getContext('2d');
+      if (context2d) {
+        context2d.clearRect(0, 0, canvas.width, canvas.height);
+        context2d.font = '13px -apple-system, BlinkMacSystemFont, sans-serif';
+        context2d.fillStyle = '#94a3b8';
+        context2d.textAlign = 'center';
+        context2d.fillText('暂无答题记录', canvas.width / 2, canvas.height / 2);
       }
       return;
     }
@@ -337,7 +371,7 @@
       data: {
         labels: ['正确', '错误'],
         datasets: [
-          { data: [correct, wrong], backgroundColor: ['#22c55e', '#ef4444'], borderWidth: 0 },
+          { data: [correctCount, wrongCount], backgroundColor: ['#22c55e', '#ef4444'], borderWidth: 0 },
         ],
       },
       options: {
@@ -352,17 +386,17 @@
   // ============================================================
   window.Render = {
     render: render,
-    renderCards: renderCards,
+    renderCards: renderCardList,
     renderChapters: renderChapters,
     renderTypeFilters: renderTypeFilters,
     renderStatsChart: renderStatsChart,
     updateTopActions: updateTopActions,
     updateStats: updateStats,
     getCurrentQs: function () {
-      return _currentQuestions;
+      return _currentQuestionList;
     },
-    setCurrentQs: function (qs) {
-      _currentQuestions = qs;
+    setCurrentQs: function (questions) {
+      _currentQuestionList = questions;
     },
     logAnswer: logAnswer,
   };

@@ -136,7 +136,11 @@
     );
   }
 
-  /** 分页获取全部行，避免 Supabase 默认行数限制截断数据 */
+  /**
+   * 分页获取全部行，避免 Supabase 默认行数限制截断数据
+   * Supabase 单次查询默认最多返回 1000 行，通过 range() 分批拉取
+   * 循环终止条件：某次返回的行数少于 batchSize，说明已是最后一批
+   */
   async function fetchAll(queryFn, label, batchSize) {
     if (!batchSize) {
       batchSize = 1000;
@@ -164,7 +168,8 @@
       return null;
     }
 
-    // 总答题次数和正确率
+    // 第一步：仅拉取 is_correct 字段计算总答题数和正确数
+    // 分两次查询而非一次全字段查询，减少单次传输的数据量
     const countResult = await fetchAll(function () {
       return c.from('answer_history').select('is_correct').eq('user_id', u).eq('version', version);
     }, 'getStats.count');
@@ -174,7 +179,7 @@
       return r.is_correct;
     }).length;
 
-    // 各章节统计
+    // 第二步：拉取 chapter + is_correct 字段计算各章节统计
     const chapterResult = await fetchAll(function () {
       return c
         .from('answer_history')

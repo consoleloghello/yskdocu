@@ -79,7 +79,8 @@
     // 获取 Response 的 ReadableStream
     let body = response.body;
     if (!body) {
-      // 降级：通过 arrayBuffer 创建流
+      // 降级：某些浏览器或 CORS 模式下 body 为 null
+      // 通过 arrayBuffer → Blob → stream 的路径间接获取可读流
       const buffer = await response.arrayBuffer();
       const blob = new Blob([buffer]);
       body = blob.stream();
@@ -102,7 +103,7 @@
       totalLength += result.value.length;
     }
 
-    // 合并所有 Uint8Array 块
+    // 合并所有 Uint8Array 块为连续缓冲区
     const merged = new Uint8Array(totalLength);
     let offset = 0;
     for (let i = 0; i < chunks.length; i++) {
@@ -110,7 +111,8 @@
       offset += chunks[i].length;
     }
 
-    // 解码并解析 JSON
+    // 使用 TextDecoder 解码为 UTF-8 文本再解析 JSON
+    // 比多次拼接字符串更高效
     const text = new TextDecoder().decode(merged);
     return JSON.parse(text);
   }
