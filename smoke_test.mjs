@@ -32,7 +32,7 @@ window.requestAnimationFrame = (cb) => setTimeout(cb, 0);
 
 window.addEventListener('error', (e) => console.log('WINDOW ERROR:', e.error && e.error.message));
 
-for (const f of ['js/state.js', 'js/renderer.js', 'js/app.js']) {
+for (const f of ['js/state.js', 'js/filter.js', 'js/renderer.js', 'js/data.js', 'js/app.js']) {
   window.eval(fs.readFileSync(f, 'utf-8'));
 }
 

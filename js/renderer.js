@@ -3,59 +3,12 @@
   if (typeof window.State === 'undefined') {
     throw new Error('state.js must be loaded before renderer.js');
   }
+  if (typeof window.Filter === 'undefined') {
+    throw new Error('filter.js must be loaded before renderer.js');
+  }
 
+  const F = window.Filter;
   let _currentQuestionList = [];
-
-  /**
-   * 根据当前状态（模式/章节/题型/搜索词）筛选并返回当前要显示的题目列表
-   * 优先级：错题模式 → 搜索 → 章节 → 题型
-   */
-  function getCurrentQuestions() {
-    const appState = State.get();
-    const flatQuestionList = State.flatQs;
-    if (appState.mode === 'wrong') {
-      return flatQuestionList.filter(function (question) {
-        return State.isWrong(question._id);
-      });
-    }
-    let filtered = appState.searchQuery
-      ? searchIn(flatQuestionList, appState.searchQuery)
-      : appState.chapter === 'all'
-        ? flatQuestionList
-        : flatQuestionList.filter(function (question) {
-            return question._chapter === appState.chapter;
-          });
-    if (appState.type !== 'all') {
-      filtered = filtered.filter(function (question) {
-        return question._type === appState.type;
-      });
-    }
-    return filtered;
-  }
-
-  /**
-   * 全字段模糊搜索：匹配题目文本、答案、章节名、题型和选项
-   * 支持搜索关键词自动转为小写实现大小写不敏感
-   */
-  function searchIn(items, query) {
-    const lowerQuery = query.toLowerCase();
-    return items.filter(function (item) {
-      return [item.question, item.answer, item._chapter, item._type]
-        .concat(item.options || [])
-        .join(' ')
-        .toLowerCase()
-        .includes(lowerQuery);
-    });
-  }
-
-  /** 按题型统计题目数量 */
-  function countByType(items) {
-    const typeCounts = {};
-    items.forEach(function (question) {
-      typeCounts[question._type] = (typeCounts[question._type] || 0) + 1;
-    });
-    return typeCounts;
-  }
 
   /**
    * 主渲染入口：依次渲染章节导航、题型筛选、顶部统计，最后渲染题目卡片列表
@@ -68,7 +21,7 @@
     renderChapters();
     renderTypeFilters();
     updateStats();
-    const questions = getCurrentQuestions();
+    const questions = F.getCurrentQuestions();
     const $ = State.getEl;
     $('topActions').style.display = questions.length ? 'flex' : 'none';
     if (questions.length === 0) {
@@ -140,11 +93,11 @@
         return State.isWrong(question._id);
       });
     } else {
-      filteredQuestions = appState.searchQuery ? searchIn(State.flatQs, appState.searchQuery) : appState.chapter === 'all' ? State.flatQs : State.flatQs.filter(function (question) {
+      filteredQuestions = appState.searchQuery ? F.searchIn(State.flatQs, appState.searchQuery) : appState.chapter === 'all' ? State.flatQs : State.flatQs.filter(function (question) {
         return question._chapter === appState.chapter;
       });
     }
-    const typeCounts = countByType(filteredQuestions);
+    const typeCounts = F.countByType(filteredQuestions);
     const typeOrder = State.QUESTION_TYPES;
     const sortedTypes = typeOrder.filter(function (typeName) {
       return typeCounts[typeName];
