@@ -244,7 +244,6 @@ REVOKE EXECUTE ON FUNCTION public.get_answer_stats(text) FROM anon;
 -- ORDER BY table_name;
 --
 -- 下一步：
---   1. Authentication → Settings → 关闭 "Enable Sign Up"
---   2. Authentication → Users → 手动添加白名单用户
---   3. 将 SUPABASE_URL 和 SUPABASE_ANON_KEY 填入 js/supabase.js
+--   1. Authentication → Sign In / Providers → 确认 Email 已启用（注册走邮箱 OTP 验证码）
+--   2. 将 SUPABASE_URL 和 SUPABASE_ANON_KEY 填入 js/supabase.js
 -- ============================================================

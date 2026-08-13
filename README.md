@@ -41,12 +41,13 @@ npm run lint:fix        # ESLint 自动修复
 npm run format          # Prettier 格式化
 npm run compress        # gzip 压缩 data/*.json → *.json.gz
 npm test                # pytest 运行解析器测试
+npm run test:smoke      # 前端冒烟测试（JSDOM）
 npm run test:coverage   # 测试 + 覆盖率报告
 ```
 
 ## 部署到 GitHub Pages
 
-Push 到 `main` 分支后，GitHub Actions 自动完成：解析 docx → 生成 changelog → gzip 压缩 JSON → 部署到 GitHub Pages。
+Push 到 `main` 分支后，GitHub Actions 自动完成：运行测试（pytest + 前端冒烟）→ 解析 docx → 生成 changelog → gzip 压缩 JSON → 部署到 GitHub Pages。
 
 > **首次配置**：仓库 Settings → Pages → Source 选择 **GitHub Actions**（仅需一次）。
 
@@ -75,7 +76,7 @@ node scripts/gen_changelog.mjs     # 输出 data/changelog.json，需提交到�
 
 | 层次 | 技术 |
 |------|------|
-| 前端 | Vanilla JS (6 模块: state / renderer / app / supabase / sync / decompress) + CSS3 |
+| 前端 | Vanilla JS（模块化：state / filter / renderer / data / app / supabase / sync / decompress）+ CSS3 |
 | 文档解析 | Python 3 + python-docx |
 | 后端服务 | Supabase (PostgreSQL + Auth + REST API) |
 | 图表 | Chart.js v4 (CDN) |

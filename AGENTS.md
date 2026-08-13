@@ -78,7 +78,6 @@ node scripts/gen_changelog.mjs     # 读取最近3条 git commit，输出 data/c
 │   └── clear_tables.sql       # 清空所有表的数据
 ├── tests/
 │   ├── conftest.py            # pytest 夹具（MockParagraph, MockRun）
-│   ├── fixtures/              # 测试用固定数据
 │   └── test_parse_docx.py     # 解析器单元测试 + 端到端集成测试
 ├── docs/
 │   ├── 后端功能方案设计.md      # 后端功能完整方案设计
