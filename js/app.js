@@ -55,9 +55,8 @@
       }
       S.data = data;
       buildFlat();
-      // 新版本加载后默认显示所有题目的答案（便于快速浏览）
+      // 每个版本默认收起选择/判断题答案，由用户主动展开（简答/实操/应急等题型始终展示）
       revealed.clear();
-      flatQs.forEach((question) => revealed.add(question._id));
       state.version = versionName;
       if (versionName === '外操版') {
         $('verWaic').classList.add(C.ACTIVE);
