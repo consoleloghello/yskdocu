@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 云端数据同步模块
  * 封装 Supabase 数据库的 CRUD 操作
  * 暴露为 window.Sync
@@ -137,30 +137,10 @@
   }
 
   /**
-   * 分页获取全部行，避免 Supabase 默认行数限制截断数据
-   * Supabase 单次查询默认最多返回 1000 行，通过 range() 分批拉取
-   * 循环终止条件：某次返回的行数少于 batchSize，说明已是最后一批
+   * 获取统计数据（数据库端聚合，避免分页拉全表）。
+   * 依赖 init_supabase.sql 中创建的 RPC get_answer_stats(text)，
+   * 返回按章节分组的 { chapter, total, correct } 行，前端累加得到总量。
    */
-  async function fetchAll(queryFn, label, batchSize) {
-    if (!batchSize) {
-      batchSize = 1000;
-    }
-    let all = [];
-    let from = 0;
-    let to = batchSize - 1;
-    let batch;
-    do {
-      batch = await silent(queryFn().range(from, to), label);
-      if (batch && batch.length) {
-        all = all.concat(batch);
-      }
-      from = to + 1;
-      to = from + batchSize - 1;
-    } while (batch && batch.length === batchSize);
-    return all;
-  }
-
-  /** 获取统计数据 */
   async function getStats(version) {
     const c = client();
     const u = uid();
@@ -168,37 +148,21 @@
       return null;
     }
 
-    // 第一步：仅拉取 is_correct 字段计算总答题数和正确数
-    // 分两次查询而非一次全字段查询，减少单次传输的数据量
-    const countResult = await fetchAll(function () {
-      return c.from('answer_history').select('is_correct').eq('user_id', u).eq('version', version);
-    }, 'getStats.count');
+    const rows = await silent(c.rpc('get_answer_stats', { p_version: version }), 'getStats');
+    if (!rows) {
+      return { total: 0, correct: 0, wrong: 0, accuracy: 0, byChapter: {} };
+    }
 
-    const total = countResult.length;
-    const correct = countResult.filter(function (r) {
-      return r.is_correct;
-    }).length;
-
-    // 第二步：拉取 chapter + is_correct 字段计算各章节统计
-    const chapterResult = await fetchAll(function () {
-      return c
-        .from('answer_history')
-        .select('chapter,is_correct')
-        .eq('user_id', u)
-        .eq('version', version);
-    }, 'getStats.chapters');
-
+    let total = 0;
+    let correct = 0;
     const byChapter = {};
-    chapterResult.forEach(function (r) {
-      if (!r.chapter) {
-        return;
-      }
-      if (!byChapter[r.chapter]) {
-        byChapter[r.chapter] = { total: 0, correct: 0 };
-      }
-      byChapter[r.chapter].total++;
-      if (r.is_correct) {
-        byChapter[r.chapter].correct++;
+    rows.forEach(function (r) {
+      const chapterTotal = Number(r.total) || 0;
+      const chapterCorrect = Number(r.correct) || 0;
+      total += chapterTotal;
+      correct += chapterCorrect;
+      if (r.chapter) {
+        byChapter[r.chapter] = { total: chapterTotal, correct: chapterCorrect };
       }
     });
 

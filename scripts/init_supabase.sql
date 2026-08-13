@@ -213,6 +213,29 @@ GRANT SELECT ON public.question_reports TO anon;
 GRANT SELECT ON public.question_notes TO anon;
 
 -- ============================================================
+-- 十一、创建答题统计聚合 RPC
+-- 在数据库端按章节聚合 answer_history，避免前端分页拉全表再统计
+-- （前端 js/sync.js 的 getStats 通过 c.rpc('get_answer_stats', { p_version }) 调用）
+-- ============================================================
+CREATE OR REPLACE FUNCTION public.get_answer_stats(p_version text)
+RETURNS TABLE (chapter text, total bigint, correct bigint)
+LANGUAGE sql
+SECURITY INVOKER
+AS $$
+  SELECT
+    chapter,
+    count(*)::bigint AS total,
+    count(*) FILTER (WHERE is_correct)::bigint AS correct
+  FROM public.answer_history
+  WHERE user_id = auth.uid() AND version = p_version
+  GROUP BY chapter;
+$$;
+
+-- 仅登录用户可执行；匿名角色不可调用
+GRANT EXECUTE ON FUNCTION public.get_answer_stats(text) TO authenticated;
+REVOKE EXECUTE ON FUNCTION public.get_answer_stats(text) FROM anon;
+
+-- ============================================================
 -- 初始化完成
 -- ============================================================
 -- 验证：执行以下查询确认表已创建
