@@ -24,9 +24,10 @@ npm run lint                          # ESLint 检查（针对 js/ 目录）
 npm run lint:fix                      # ESLint 自动修复
 npm run format                        # Prettier 格式化（js/ 目录）
 
-# 测试（解析器单元测试 + 集成测试）
+# 测试（解析器单元测试 + 前端冒烟测试）
 npm test                              # pytest 运行 tests/ 目录全部测试
 npm run test:coverage                 # 测试 + 覆盖率报告
+node smoke_test.mjs                   # 前端冒烟测试（JSDOM：转义/弹窗/渲染）
 
 # 压缩 JSON 数据文件（解析 docx 后或部署前运行）
 npm run compress                      # gzip 压缩 data/*.json → *.json.gz
@@ -50,12 +51,17 @@ node scripts/gen_changelog.mjs     # 读取最近3条 git commit，输出 data/c
 ├── index.html                 # HTML 骨架（含全部弹窗模板）
 ├── css/style.css              # 全部样式（含 7 类弹窗、入口遮罩、answer/report/note）
 ├── js/
-│   ├── state.js               # window.State — 状态管理、localStorage 持久化、工具函数
+│   ├── state.js               # window.State — 状态存储（pub/sub）、localStorage 持久化、工具函数
+│   ├── filter.js              # window.Filter — 题目筛选纯函数（searchIn/countByType/getCurrentQuestions）
 │   ├── renderer.js            # window.Render — DOM 渲染、统计图表
-│   ├── app.js                 # 主控制器：加载数据、事件绑定、弹窗逻辑、版本切换
+│   ├── data.js                # window.Data — 加载数据/buildFlat（稳定 _id + 迁移）/拉云端
+│   ├── app.js                 # 入口：事件绑定、弹窗逻辑、版本切换、订阅渲染
 │   ├── supabase.js            # window.SupabaseAuth — Supabase 认证（登录/注册/登出）
-│   ├── sync.js                # window.Sync — 云端 CRUD（错题、笔记、统计、报错）
-│   └── decompress.js          # window.Decompress — 浏览器端 gzip 解压工具（DecompressionStream）
+│   ├── sync.js                # window.Sync — 云端 CRUD（错题、笔记、统计 RPC、报错）
+│   ├── decompress.js          # window.Decompress — 浏览器端 gzip 解压工具（DecompressionStream）
+│   ├── background-motion.js   # window.BgMotion — 背景动画开关/暂停守卫
+│   ├── background-synthetic-flux.js   # 入口遮罩背景动画（p5.js）
+│   └── background-quantum-foam.js     # 主页面背景动画（p5.js）
 ├── data/
 │   ├── 外操版.json             # 外操作题库 JSON
 │   ├── 内操版.json             # 内操作题库 JSON
@@ -99,13 +105,15 @@ node scripts/gen_changelog.mjs     # 读取最近3条 git commit，输出 data/c
 
 ### 前端架构（匿名模式）
 
-`index.html`（弹窗模板）+ `css/style.css` + 3 个核心 JS 模块：
+`index.html`（弹窗模板）+ `css/style.css` + 核心 JS 模块，按依赖顺序加载：
 
 | 文件 | 职责 |
 |---|---|
-| `js/state.js` (`window.State`) | 全局状态管理、localStorage 持久化、HTML 转义/搜索高亮/防抖工具函数 |
-| `js/renderer.js` (`window.Render`) | `render()` 编排章节导航、题型筛选、卡片渲染、统计图表（Chart.js 饼图） |
-| `js/app.js` | 加载 JSON/buildFlat、事件委托（答案/笔记/报错/选择选项）、版本切换、入口遮罩、搜索、弹窗逻辑 |
+| `js/state.js` (`window.State`) | 状态存储（pub/sub：`set/setMulti` 自动持久化并通知渲染）、HTML 转义/搜索高亮/防抖工具 |
+| `js/filter.js` (`window.Filter`) | 题目筛选纯函数：`searchIn` / `countByType` / `getCurrentQuestions`（无 DOM 副作用） |
+| `js/renderer.js` (`window.Render`) | `render()` 编排章节导航、题型筛选、卡片渲染、统计图表（Chart.js 饼图），筛选逻辑调用 `Filter` |
+| `js/data.js` (`window.Data`) | `loadData` / `buildFlat`（稳定 `_id` + 旧 ID 迁移）/ `pullCloudData` |
+| `js/app.js` | 入口：事件委托（答案/笔记/报错/选项）、版本切换、入口遮罩、搜索、弹窗逻辑、订阅渲染 |
 
 ### 前端架构（登录模式，已实现）
 
@@ -114,7 +122,7 @@ node scripts/gen_changelog.mjs     # 读取最近3条 git commit，输出 data/c
 | 文件 | 职责 |
 |---|---|
 | `js/supabase.js` (`window.SupabaseAuth`) | 初始化 supabase 客户端、邮箱密码登录/注册、OTP 邮箱验证、登出、session 管理、UI 更新 |
-| `js/sync.js` (`window.Sync`) | 云端 CRUD 封装：错题增删（upsert）、统计上报（分页 fetchAll）、笔记读写、报错提交 |
+| `js/sync.js` (`window.Sync`) | 云端 CRUD 封装：错题增删（upsert）、统计（调用 RPC `get_answer_stats`）、笔记读写、报错提交 |
 | `js/decompress.js` (`window.Decompress`) | 浏览器端 gzip 解压：利用原生 DecompressionStream 解压 `.json.gz` 文件，自动降级到 `.json` |
 
 登录后数据同时写入 localStorage（缓存）和 Supabase（主存储），离线不阻塞。
@@ -168,7 +176,7 @@ const CSS = {
 
 ```javascript
 {
-  _id: "火炬_选择题_0",     // 合成 ID：章节_题型_序号
+  _id: "火炬_选择题_0",     // 稳定 ID：章节_题型_本题型内序号（见下方「题目 ID」）
   _chapter: "火炬",
   _type: "选择题",
   question: "...",
@@ -177,13 +185,15 @@ const CSS = {
 }
 ```
 
+**题目 ID**：`data.js` 的 `buildFlat()` 以「章节_题型_本题型内序号」生成稳定 `_id`（旧版为全局自增，题库任一处增删都会串位）。同时生成 `State.legacyIdMap`（旧 ID → 新 ID），本地错题本与云端错题/笔记在加载时自动迁移。
+
 #### JSON 压缩优化
 
 项目使用 gzip 算法压缩数据文件以加快首次加载速度：
 
 1. 运行 `npm run compress` 执行 `scripts/compress_data.mjs`，使用 Node.js `zlib.gzipSync()` 将 `data/*.json` 压缩为 `data/*.json.gz`（压缩比约 23%）
 2. `js/decompress.js` 在浏览器端通过原生 `DecompressionStream('gzip')` API 解压，无需额外库
-3. `js/app.js` 的 `loadData()` 优先加载 `.json.gz` 文件，若失败则自动降级到 `.json`
+3. `js/data.js` 的 `loadData()` 优先加载 `.json.gz` 文件，若失败则自动降级到 `.json`
 4. 开发服务器 `serve.mjs` 默认以 `application/octet-stream` 提供 `.gz` 文件
 
 # 版本切换 & 入口遮罩
@@ -243,9 +253,11 @@ const CSS = {
 
 所有表通过 `user_id` 关联 Supabase Auth 用户，启用 RLS（Row Level Security）保证用户只能读写自己的数据。
 
+此外定义了一个 RPC 函数 `get_answer_stats(text)`，在数据库端按章节聚合 `answer_history`（前端 `sync.js` 的 `getStats` 调用），避免分页拉全表再统计。
+
 ## 关键约束
 
-- **生产环境零构建**：SPA 由 1 个 HTML + 1 个 CSS + 5 个 JS + 2 个 JSON 组成，依赖 supabase-js CDN 和 Chart.js CDN
+- **生产环境零构建**：SPA 由 1 个 HTML + 1 个 CSS + 11 个 JS 模块 + data/*.json(含 .gz) 组成，依赖 supabase-js CDN、Chart.js CDN 和 p5.js CDN（背景动画）
 - **移动端优先**：响应式 CSS 适配到 320px。粘性顶部栏、横向滚动 chip 导航、适合触控的点击区域
 - **无离线/PWA 支持**：Service Worker 未实现（列为 P3 技术债）
 - **中文文件名**：JSON 文件名为中文。`scripts/serve.mjs` 包含 `decodeURIComponent` 处理；Python 的 `http.server` 可能无法正确处理
