@@ -33,4 +33,4 @@ npm run compress                # gzip 压缩 data/*.json → *.json.gz
 ## 关键约束
 
 - 零构建、移动端优先、中文文件名、localStorage 是匿名用户唯一持久化。
-- CDN 依赖：supabase-js、Chart.js、p5.js（背景动画已在 reduced-motion/移动端默认关闭）。
+- CDN 依赖：supabase-js、Chart.js；p5.js 背景动画按需加载（移动端 / reduced-motion 不下载，入口遮罩无需等动画）。

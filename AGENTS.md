@@ -60,8 +60,9 @@ node scripts/gen_changelog.mjs     # 读取最近3条 git commit，输出 data/c
 │   ├── sync.js                # window.Sync — 云端 CRUD（错题、笔记、统计 RPC、报错）
 │   ├── decompress.js          # window.Decompress — 浏览器端 gzip 解压工具（DecompressionStream）
 │   ├── background-motion.js   # window.BgMotion — 背景动画开关/暂停守卫
-│   ├── background-synthetic-flux.js   # 入口遮罩背景动画（p5.js）
-│   └── background-quantum-foam.js     # 主页面背景动画（p5.js）
+│   ├── background-loader.js   # 按需加载器：仅 desktop 且非 reduced-motion 时注入 p5.js 与动画
+│   ├── background-synthetic-flux.js   # 入口遮罩背景动画（p5.js，动态加载）
+│   └── background-quantum-foam.js     # 主页面背景动画（p5.js，动态加载）
 ├── data/
 │   ├── 外操版.json             # 外操作题库 JSON
 │   ├── 内操版.json             # 内操作题库 JSON
@@ -113,6 +114,8 @@ node scripts/gen_changelog.mjs     # 读取最近3条 git commit，输出 data/c
 | `js/renderer.js` (`window.Render`) | `render()` 编排章节导航、题型筛选、卡片渲染、统计图表（Chart.js 饼图），筛选逻辑调用 `Filter` |
 | `js/data.js` (`window.Data`) | `loadData` / `buildFlat`（稳定 `_id` + 旧 ID 迁移）/ `pullCloudData` |
 | `js/app.js` | 入口：事件委托（答案/笔记/报错/选项）、版本切换、入口遮罩、搜索、弹窗逻辑、订阅渲染 |
+
+> **脚本加载策略**：全部 `defer`（并行下载、不阻塞渲染）；`app.js` 在 p5/Chart 之前执行，入口遮罩无需等动画；p5.js 由 `background-loader.js` 按需注入（移动端 / reduced-motion 不下载）。
 
 ### 前端架构（登录模式，已实现）
 
@@ -256,12 +259,12 @@ const CSS = {
 
 ## 关键约束
 
-- **生产环境零构建**：SPA 由 1 个 HTML + 1 个 CSS + 11 个 JS 模块 + data/*.json(含 .gz) 组成，依赖 supabase-js CDN、Chart.js CDN 和 p5.js CDN（背景动画）
+- **生产环境零构建**：SPA 由 1 个 HTML + 1 个 CSS + 12 个 JS 模块 + data/*.json(含 .gz) 组成，依赖 supabase-js CDN、Chart.js CDN；p5.js CDN 仅桌面端按需加载（移动端/reduced-motion 不下载）
 - **移动端优先**：响应式 CSS 适配到 320px。粘性顶部栏、横向滚动 chip 导航、适合触控的点击区域
 - **无离线/PWA 支持**：Service Worker 未实现（列为 P3 技术债）
 - **中文文件名**：JSON 文件名为中文。`scripts/serve.mjs` 包含 `decodeURIComponent` 处理；Python 的 `http.server` 可能无法正确处理
 - **localStorage 是匿名用户唯一持久化方式**：清除 localStorage 会丢失所有数据
-- **CDN 依赖**：依赖 `cdn.jsdelivr.net` 加载 supabase-js 和 Chart.js，网络离线时登录功能不可用，匿名刷题不受影响
+- **CDN 依赖**：依赖 `cdn.jsdelivr.net`（supabase-js、Chart.js）与 `cdnjs.cloudflare.com`（p5.js 按需加载），网络离线时登录/图表/动画不可用，匿名刷题不受影响
 
 ## 已知问题
 

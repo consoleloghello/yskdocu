@@ -6,6 +6,9 @@
 <meta name="description" content="公用工程题库 — 化工企业公用工程岗位考试刷题应用，涵盖火炬、罐区、锅炉等9大系统">
 <title>公用工程题库</title>
 <link rel="stylesheet" href="css/style.css">
+<!-- 预连接 CDN 源，省去 DNS + TLS 握手延迟 -->
+<link rel="preconnect" href="https://cdnjs.cloudflare.com">
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
 </head>
 <body>
 <noscript><div style="text-align:center;padding:40px;font-size:16px;color:#666;">请启用 JavaScript 以使用刷题功能</div></noscript>
@@ -188,31 +191,27 @@
   </div>
 </div>
 
-<!-- App 模块（按依赖顺序） -->
-<script src="js/state.js"></script>
-<script src="js/filter.js"></script>
-<script src="js/decompress.js"></script>
-<script src="js/renderer.js"></script>
-<script src="js/data.js"></script>
+<!-- App 模块（defer 并行下载、不阻塞渲染，按文档顺序执行） -->
+<script defer src="js/state.js"></script>
+<script defer src="js/filter.js"></script>
+<script defer src="js/decompress.js"></script>
+<script defer src="js/renderer.js"></script>
+<script defer src="js/data.js"></script>
 
-<!-- CDN: p5.js -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.0/p5.min.js"></script>
-<!-- p5.js 背景动画开关/暂停守卫（reduced-motion + 移动端关闭 + 后台暂停） -->
-<script src="js/background-motion.js"></script>
-<!-- p5.js 背景动画脚本 -->
-<script src="js/background-synthetic-flux.js"></script>
-<script src="js/background-quantum-foam.js"></script>
+<!-- CDN: Supabase SDK（app.js 的登录态监听依赖，需在其之前执行） -->
+<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script defer src="js/supabase.js"></script>
+<script defer src="js/sync.js"></script>
 
-<!-- CDN: Supabase SDK -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<script src="js/supabase.js"></script>
-<script src="js/sync.js"></script>
+<!-- App 入口：绑定遮罩点击等交互（在 p5/Chart 之前执行，入口立即可点，无需等动画） -->
+<script defer src="js/app.js"></script>
 
-<!-- CDN: Chart.js -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<!-- 背景动画开关 + 按需加载器：仅 desktop 且非 reduced-motion 时才注入 p5.js 与动画脚本 -->
+<script defer src="js/background-motion.js"></script>
+<script defer src="js/background-loader.js"></script>
 
-<!-- App 入口（最后加载：依赖上述全部模块与 CDN，登录态监听依赖 supabase.js 已加载） -->
-<script src="js/app.js"></script>
+<!-- CDN: Chart.js（统计弹窗时才用到） -->
+<script defer src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 
 </body>
 </html>
