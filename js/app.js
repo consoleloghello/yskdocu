@@ -221,15 +221,6 @@
       return;
     }
     R.render();
-    _currentQuestions = R.getCurrentQs();
-  }
-
-  // 当前渲染的题目列表引用（供 revealAll/hideAll/笔记刷新等快速操作使用）
-  let _currentQuestions = [];
-  /** 渲染卡片并更新当前列表引用 */
-  function renderCards(questions) {
-    _currentQuestions = questions;
-    R.renderCards(questions);
   }
 
   /** 云端记录答题结果（仅登录用户） */
@@ -611,7 +602,7 @@
   });
 
   function revealAllCards() {
-    _currentQuestions.forEach(function (question) { revealed.add(question._id); });
+    R.getCurrentQs().forEach(function (question) { revealed.add(question._id); });
     // 直接操作已渲染的 DOM 卡片，避免全量重渲染
     document.querySelectorAll('#questionList .' + C.Q_CARD).forEach(function (cardEl) {
       let cardId = cardEl.dataset.id;
@@ -635,7 +626,7 @@
   }
   $('revealAllBtn').addEventListener('click', revealAllCards);
   function hideAllCards() {
-    _currentQuestions.forEach(function (question) { revealed.delete(question._id); });
+    R.getCurrentQs().forEach(function (question) { revealed.delete(question._id); });
     // 直接操作已渲染的 DOM 卡片，避免全量重渲染
     document.querySelectorAll('#questionList .' + C.Q_CARD).forEach(function (cardEl) {
       let cardId = cardEl.dataset.id;
