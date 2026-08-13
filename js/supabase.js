@@ -94,21 +94,6 @@
     }
   }
 
-  /** 发送邮箱验证码 OTP */
-  async function sendOtp(email) {
-    if (!supabase) {
-      throw new Error('Supabase 未初始化');
-    }
-    const { data, error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { shouldCreateUser: false },
-    });
-    if (error) {
-      throw error;
-    }
-    return data;
-  }
-
   /** 验证邮箱 OTP Token（注册确认） */
   async function verifyOtpToken(email, token) {
     if (!supabase) {
@@ -565,7 +550,6 @@
     signIn: signIn,
     signUp: signUp,
     signOut: signOut,
-    sendOtp: sendOtp,
     verifyOtpToken: verifyOtpToken,
     getUser: getUser,
     isLoggedIn: isLoggedIn,
