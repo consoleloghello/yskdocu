@@ -99,6 +99,14 @@
     return _escapeDiv.innerHTML;
   }
 
+  /**
+   * 转义 HTML 属性值：escapeHtml 基于 textContent→innerHTML，浏览器序列化时不转义引号，
+   * 拼接进 data-* 等属性值时会破坏属性边界，需在此额外转义双引号和单引号
+   */
+  function escapeAttr(text) {
+    return escapeHtml(text).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
   function escapeRegex(str) {
     return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
@@ -173,6 +181,9 @@
     CLICKED: 'clicked',
     EXIT: 'exit',
     HIDE: 'hide',
+    // 弹窗
+    MODAL_CLOSE: 'modal-close',
+    DISMISS_ATTR: 'data-dismiss',
   };
 
   window.State = {
@@ -272,6 +283,8 @@
     getEl: getEl,
     esc: escapeHtml,
     escapeHtml: escapeHtml,
+    escAttr: escapeAttr,
+    escapeAttr: escapeAttr,
     highlightText: highlightText,
     debounce: debounce,
     QUESTION_TYPES: QUESTION_TYPES,

@@ -155,6 +155,7 @@ const CSS = {
   VER_BTN: 'ver-btn',
   OVERLAY_CARD: 'overlay-card', RIPPLE: 'ripple',
   CLICKED: 'clicked', EXIT: 'exit', HIDE: 'hide',
+  MODAL_CLOSE: 'modal-close', DISMISS_ATTR: 'data-dismiss',
 };
 ```
 

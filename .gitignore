@@ -6,3 +6,5 @@ dist/
 
 nul
 .coverage
+.pi/
+.pi-subagents/

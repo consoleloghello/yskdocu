@@ -207,6 +207,56 @@
   }
 
   // ============================================================
+  // 通用弹窗管理：统一处理关闭按钮(.modal-close / [data-dismiss])与遮罩点击关闭
+  // ============================================================
+  const _modals = {};
+
+  /**
+   * 初始化弹窗：绑定所有关闭按钮与遮罩点击关闭
+   * @param {string} id 弹窗元素 ID
+   * @param {Function} [onClose] 关闭时回调
+   */
+  function initModal(id, onClose) {
+    const modal = $(id);
+    if (!modal) {
+      return null;
+    }
+    const close = function () {
+      modal.style.display = 'none';
+      if (onClose) {
+        onClose();
+      }
+    };
+    modal.querySelectorAll('.' + C.MODAL_CLOSE + ', [' + C.DISMISS_ATTR + ']').forEach(function (el) {
+      el.addEventListener('click', close);
+    });
+    // 点击遮罩（弹窗自身背景）关闭
+    modal.addEventListener('click', function (e) {
+      if (e.target === modal) {
+        close();
+      }
+    });
+    _modals[id] = { el: modal, close: close };
+    return _modals[id];
+  }
+
+  /** 打开弹窗 */
+  function openModal(id) {
+    const entry = _modals[id];
+    if (entry) {
+      entry.el.style.display = 'flex';
+    }
+  }
+
+  /** 关闭弹窗（触发 onClose 回调） */
+  function closeModal(id) {
+    const entry = _modals[id];
+    if (entry) {
+      entry.close();
+    }
+  }
+
+  // ============================================================
   // 笔记弹窗
   // ============================================================
   function openNoteModal(questionId) {
@@ -221,7 +271,7 @@
     // 填充已有内容
     textarea.value = localNotes[questionId] || '';
     modal.dataset.questionId = questionId;
-    modal.style.display = 'flex';
+    openModal('noteModal');
 
     // 保存
     saveBtn.onclick = async function () {
@@ -244,7 +294,7 @@
             await window.Sync.saveNote(state.version, questionId, content);
           }
         }
-        modal.style.display = 'none';
+        closeModal('noteModal');
         updateNoteIcon(questionId);
       } finally {
         saveBtn.disabled = false;
@@ -266,7 +316,7 @@
           if (window.Sync && window.SupabaseAuth && window.SupabaseAuth.isLoggedIn()) {
             await window.Sync.deleteNote(state.version, questionId);
           }
-          modal.style.display = 'none';
+          closeModal('noteModal');
           updateNoteIcon(questionId);
         } finally {
           saveBtn.disabled = false;
@@ -278,24 +328,8 @@
     }
   }
 
-  // 关闭笔记弹窗
-  (function () {
-    const modal = $('noteModal');
-    if (!modal) {
-      return;
-    }
-    $('noteClose').addEventListener('click', function () {
-      modal.style.display = 'none';
-    });
-    $('noteCancel').addEventListener('click', function () {
-      modal.style.display = 'none';
-    });
-    modal.addEventListener('click', function (e) {
-      if (e.target === modal) {
-        modal.style.display = 'none';
-      }
-    });
-  })();
+  // 关闭笔记弹窗（关闭按钮 + 遮罩点击由通用弹窗管理处理）
+  initModal('noteModal');
 
   // ============================================================
   // 报错弹窗
@@ -313,7 +347,7 @@
     }
 
     modal.dataset.questionId = questionId;
-    modal.style.display = 'flex';
+    openModal('reportModal');
     // 清除上次选择
     modal.querySelectorAll('input[name="reportReason"]').forEach(function (radioBtn) {
       radioBtn.checked = false;
@@ -324,22 +358,14 @@
     $('reportSubmit').textContent = '提交';
   }
 
+  // 关闭报错弹窗（关闭按钮 + 遮罩点击由通用弹窗管理处理）
+  initModal('reportModal');
+
   (function () {
     const modal = $('reportModal');
     if (!modal) {
       return;
     }
-    $('reportClose').addEventListener('click', function () {
-      modal.style.display = 'none';
-    });
-    $('reportCancel').addEventListener('click', function () {
-      modal.style.display = 'none';
-    });
-    modal.addEventListener('click', function (e) {
-      if (e.target === modal) {
-        modal.style.display = 'none';
-      }
-    });
 
     $('reportSubmit').addEventListener('click', async function () {
       const questionId = modal.dataset.questionId;
@@ -371,7 +397,7 @@
         // 按钮保持禁用，防止重复提交
         $('reportSubmit').textContent = '已提交';
         setTimeout(function () {
-          modal.style.display = 'none';
+          closeModal('reportModal');
         }, 1500);
       } else {
         msgEl.textContent = '提交失败，请稍后重试';
@@ -385,17 +411,15 @@
   // Changelog Modal
   // ============================================================
   (function () {
-    const modal = $('changelogModal');
-    const closeBtn = $('changelogClose');
     const body = $('changelogBody');
-    if (!modal || !closeBtn || !body) {
+    if (!body) {
       return;
     }
 
     let pendingHash = null;
 
-    function closeChangelog() {
-      modal.style.display = 'none';
+    // 关闭时记录已读的最新 commit hash（关闭按钮 + 遮罩点击由通用弹窗管理处理）
+    initModal('changelogModal', function () {
       if (pendingHash) {
         try {
           localStorage.setItem('ysk_changelog_seen', pendingHash);
@@ -403,12 +427,6 @@
           /* silent */
         }
         pendingHash = null;
-      }
-    }
-    closeBtn.addEventListener('click', closeChangelog);
-    modal.addEventListener('click', function (e) {
-      if (e.target === modal) {
-        closeChangelog();
       }
     });
 
@@ -449,7 +467,7 @@
         }
         if (seenHash !== latestHash) {
           pendingHash = latestHash;
-          modal.style.display = 'flex';
+          openModal('changelogModal');
         }
       })
       .catch(function (err) {
@@ -504,7 +522,7 @@
     const isLoggedIn = window.SupabaseAuth && window.SupabaseAuth.isLoggedIn();
 
     let statsHtml = `
-    <div class="stat-row"><span class="stat-label">题库版本</span><span class="stat-value">${state.version}</span></div>
+    <div class="stat-row"><span class="stat-label">题库版本</span><span class="stat-value">${esc(state.version)}</span></div>
     <div class="stat-row"><span class="stat-label">总题数</span><span class="stat-value">${totalQuestions}</span></div>
     <div class="stat-row"><span class="stat-label">章节数</span><span class="stat-value">${data.chapters.length}</span></div>
     <div class="stat-row"><span class="stat-label">错题数</span><span class="stat-value">${wrongCount}</span></div>
@@ -529,23 +547,17 @@
       </div>`;
 
       $('statsBody').innerHTML = statsHtml;
-      $('statsModal').style.display = 'flex';
+      openModal('statsModal');
 
       // 渲染 Chart.js 饼图
       renderStatsChart(cloudStats);
     } else {
       $('statsBody').innerHTML = statsHtml;
-      $('statsModal').style.display = 'flex';
+      openModal('statsModal');
     }
   });
-  $('statsClose').addEventListener('click', () => {
-    $('statsModal').style.display = 'none';
-  });
-  $('statsModal').addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) {
-      e.currentTarget.style.display = 'none';
-    }
-  });
+  // 关闭按钮 + 遮罩点击由通用弹窗管理处理
+  initModal('statsModal');
 
   // Top action buttons
   $('wrongBookBtn').addEventListener('click', () => {

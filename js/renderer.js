@@ -101,6 +101,8 @@
     // 错题模式下强制显示「全部」，不允许按章节筛选
     const activeChapterName = appState.mode === 'wrong' ? 'all' : appState.chapter;
     const C = State.CSS;
+    const esc = State.escapeHtml;
+    const escAttr = State.escapeAttr;
     let html =
       '<button class="' + C.CHIP + ' ' + (activeChapterName === 'all' ? C.ACTIVE : '') + '" data-ch="all">全部<span class="' + C.COUNT + '">' + State.flatQs.length + '</span></button>';
       State.data.chapters.forEach(function (chapter) {
@@ -108,7 +110,7 @@
         return sum + group.questions.length;
       }, 0);
       html +=
-        '<button class="' + C.CHIP + ' ' + (activeChapterName === chapter.name ? C.ACTIVE : '') + '" data-ch="' + chapter.name +  '">' + chapter.name + '<span class="' + C.COUNT + '">' + questionCount + '</span></button>';
+        '<button class="' + C.CHIP + ' ' + (activeChapterName === chapter.name ? C.ACTIVE : '') + '" data-ch="' + escAttr(chapter.name) + '">' + esc(chapter.name) + '<span class="' + C.COUNT + '">' + questionCount + '</span></button>';
     });
     chapterListEl.innerHTML = html;
     chapterListEl.querySelectorAll('.' + C.CHIP).forEach(function (buttonEl) {
@@ -130,6 +132,8 @@
     const typeFilterEl = State.$('typeFilters');
     const appState = State.get();
     const C = State.CSS;
+    const esc = State.escapeHtml;
+    const escAttr = State.escapeAttr;
     // 根据当前模式/搜索/章节计算题型分布
     let filteredQuestions;
     if (appState.mode === 'wrong') {
@@ -163,9 +167,9 @@
         '<button class="' + C.TYPE_BTN + ' ' +
         (appState.type === typeName ? C.ACTIVE : '') +
         '" data-type="' +
-        typeName +
+        escAttr(typeName) +
         '">' +
-        typeName +
+        esc(typeName) +
         ' <span class="' + C.COUNT + '">' +
         typeCounts[typeName] +
         '</span></button>';
@@ -227,12 +231,14 @@
       const isWrong = State.isWrong(question._id);
       const notes = State.getLocalNotes();
       const hasNote = notes[question._id];
+      const esc = State.escapeHtml;
+      const escAttr = State.escapeAttr;
       let html = '';
 
       // 卡片头部：题型标签 + 章节名 + 题号
-      html += '<div class="' + C.Q_CARD + '" data-id="' + question._id + '">' +
-        '<div class="' + C.Q_CARD_HEADER + '"><span class="' + C.Q_TYPE_BADGE + '">' + question._type +
-        '</span><span class="' + C.Q_CHAPTER_LABEL + '">' + question._chapter + ' · #' + (position + 1) + '</span></div>' +
+      html += '<div class="' + C.Q_CARD + '" data-id="' + escAttr(question._id) + '">' +
+        '<div class="' + C.Q_CARD_HEADER + '"><span class="' + C.Q_TYPE_BADGE + '">' + esc(question._type) +
+        '</span><span class="' + C.Q_CHAPTER_LABEL + '">' + esc(question._chapter) + ' · #' + (position + 1) + '</span></div>' +
         '<div class="' + C.Q_TEXT + '">' + highlightText(question.question, appState.searchQuery) + '</div>';
 
       // 选择题选项区域（65 对应 ASCII 'A'）
@@ -265,16 +271,16 @@
 
       // 简答/实操/应急处理等题型默认显示答案，不需要显示/隐藏按钮
       if (!isDirectType) {
-        html += '<button class="' + C.Q_SHOW_ANSWER_BTN + '" data-id="' + question._id + '">' +
+        html += '<button class="' + C.Q_SHOW_ANSWER_BTN + '" data-id="' + escAttr(question._id) + '">' +
           (isRevealed ? '隐藏答案' : '显示答案') + '</button>';
       }
 
       // 登录用户额外显示笔记和报错按钮
       if (isLoggedIn) {
         html += '<div class="' + C.Q_ACTIONS + '">' +
-          '<button class="' + C.Q_ACTION_BTN + ' ' + C.Q_NOTE_BTN + '" data-id="' + question._id + '">' +
+          '<button class="' + C.Q_ACTION_BTN + ' ' + C.Q_NOTE_BTN + '" data-id="' + escAttr(question._id) + '">' +
           (hasNote ? '📝✏️' : '📝') + ' 笔记</button>' +
-          '<button class="' + C.Q_ACTION_BTN + ' ' + C.Q_REPORT_BTN + '" data-id="' + question._id + '">🐛 报错</button></div>';
+          '<button class="' + C.Q_ACTION_BTN + ' ' + C.Q_REPORT_BTN + '" data-id="' + escAttr(question._id) + '">🐛 报错</button></div>';
       }
 
       html += '</div>';
@@ -332,7 +338,7 @@
       return;
     }
     State.$('welcomeStats').innerHTML =
-      State.get().version +
+      State.escapeHtml(State.get().version) +
       ' · ' +
       State.flatQs.length +
       ' 道题 · 错题 ' +
