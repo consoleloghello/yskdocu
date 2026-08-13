@@ -180,6 +180,9 @@
   // ========== p5.js 草图（实例模式） ==========
   const sketch2 = function (p) {
     p5bg = p;
+    if (window.BgMotion) {
+      window.BgMotion.bindPause(p);
+    }
 
     p.setup = function () {
       const container = document.getElementById('p5bg-main');
@@ -276,12 +279,14 @@
     };
   };
 
-  // ========== 启动 ==========
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function () {
+  // ========== 启动（reduced-motion / 移动端默认关闭） ==========
+  if (window.BgMotion && window.BgMotion.shouldRun()) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function () {
+        new p5(sketch2, 'p5bg-main');
+      });
+    } else {
       new p5(sketch2, 'p5bg-main');
-    });
-  } else {
-    new p5(sketch2, 'p5bg-main');
+    }
   }
 })();
