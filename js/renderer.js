@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
   'use strict';
   if (typeof window.State === 'undefined') {
     throw new Error('state.js must be loaded before renderer.js');
@@ -308,19 +308,6 @@
     requestAnimationFrame(renderChunk);
   }
 
-  /** 云端记录答题结果（仅登录用户） */
-  function logAnswer(question, isCorrect) {
-    if (!window.Sync || !window.SupabaseAuth || !window.SupabaseAuth.isLoggedIn()) {
-      return;
-    }
-    window.Sync.recordAnswer(State.get().version, question._id, question._chapter, question._type, isCorrect);
-    if (!isCorrect) {
-      window.Sync.addWrongQuestion(State.get().version, question._id, question._chapter, question._type);
-    } else if (State.isWrong(question._id)) {
-      window.Sync.removeWrongQuestion(State.get().version, question._id);
-    }
-  }
-
   /** 更新顶部操作按钮的状态：错题数量、全部显示/全部隐藏按钮的可见性 */
   function updateTopActions() {
     const wrongCount = State.wrongCount();
@@ -404,6 +391,5 @@
     setCurrentQs: function (questions) {
       _currentQuestionList = questions;
     },
-    logAnswer: logAnswer,
   };
 })();
