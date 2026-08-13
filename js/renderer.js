@@ -122,7 +122,6 @@
         State.setMulti({ chapter: buttonEl.dataset.ch, type: 'all', mode: 'browse', searchQuery: '' });
         State.$('searchInput').value = '';
         buttonEl.scrollIntoView({behavior:"smooth",block:"nearest",inline:"center"});
-        render();
       });
     });
   }
@@ -183,7 +182,6 @@
       buttonEl.addEventListener('click', function () {
         State.set('type', buttonEl.dataset.type);
         buttonEl.scrollIntoView({behavior:"smooth",block:"nearest",inline:"center"});
-        render();
       });
     });
   }

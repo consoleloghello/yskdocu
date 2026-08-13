@@ -520,14 +520,12 @@
   const doSearch = S.debounce(function () {
     const searchValue = $('searchInput').value.trim();
     $('searchClear').style.display = searchValue ? 'inline' : 'none';
-    state.searchQuery = searchValue;
-    state.mode = searchValue ? 'search' : 'browse';
-    if (searchValue) {
-      state.chapter = 'all';
-    }
-    state.type = 'all';
-    saveState();
-    render();
+    S.setMulti({
+      searchQuery: searchValue,
+      mode: searchValue ? 'search' : 'browse',
+      chapter: searchValue ? 'all' : state.chapter,
+      type: 'all',
+    });
   }, 300);
   $('searchInput').addEventListener('input', function () {
     if (!_isComposing) {
@@ -537,11 +535,7 @@
   $('searchClear').addEventListener('click', () => {
     $('searchInput').value = '';
     $('searchClear').style.display = 'none';
-    state.searchQuery = '';
-    state.mode = 'browse';
-    state.type = 'all';
-    saveState();
-    render();
+    S.setMulti({ searchQuery: '', mode: 'browse', type: 'all' });
   });
 
   // ============================================================
@@ -592,13 +586,8 @@
 
   // Top action buttons
   $('wrongBookBtn').addEventListener('click', () => {
-    state.mode = 'wrong';
-    state.chapter = 'all';
-    state.type = 'all';
-    state.searchQuery = '';
     $('searchInput').value = '';
-    saveState();
-    render();
+    S.setMulti({ mode: 'wrong', chapter: 'all', type: 'all', searchQuery: '' });
   });
 
   function revealAllCards() {
@@ -804,6 +793,8 @@
   // ============================================================
   // 初始化：恢复上次状态 + 启动认证监听
   // ============================================================
+  // 订阅状态变更：set/setMulti 自动持久化并触发 render()，消除散落的 saveState()+render()
+  S.subscribe(render);
   loadState();
   // loadState() 可能从 localStorage 重建了 _revealed Set，需同步引用
   revealed = S.getRevealed();

@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
   'use strict';
 
   // ============================================================
@@ -22,6 +22,8 @@
   let _revealed = new Set();
   const _localNotes = {};
   const _reportedQuestions = {};
+  // 状态变更订阅者：set/setMulti 后逐个调用，用于自动触发重渲染
+  const _subscribers = [];
 
   // ============================================================
   // DOM / localStorage 辅助
@@ -80,6 +82,17 @@
     _saveToStorage('ysk_state', stateWithoutWrongBook);
     _saveToStorage('ysk_wrong_' + _state.version, _state.wrongBook);
     _saveToStorage('ysk_revealed', [..._revealed]);
+  }
+
+  /** 通知所有订阅者（单个订阅者抛错不应阻断其他订阅者） */
+  function _notify() {
+    _subscribers.forEach(function (fn) {
+      try {
+        fn();
+      } catch (e) {
+        console.error('State subscriber error:', e);
+      }
+    });
   }
 
   // ============================================================
@@ -208,12 +221,24 @@
     set: function (key, value) {
       _state[key] = value;
       _saveState();
+      _notify();
     },
     setMulti: function (obj) {
       for (const key in obj) {
         _state[key] = obj[key];
       }
       _saveState();
+      _notify();
+    },
+    /** 订阅状态变更，返回取消订阅函数 */
+    subscribe: function (fn) {
+      _subscribers.push(fn);
+      return function () {
+        const idx = _subscribers.indexOf(fn);
+        if (idx >= 0) {
+          _subscribers.splice(idx, 1);
+        }
+      };
     },
 
     // 答案揭示集合
