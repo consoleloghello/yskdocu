@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
   'use strict';
   const _deps = [];
   if (typeof window.State === 'undefined') {
@@ -66,13 +66,9 @@
         $('verNei').classList.add(C.ACTIVE);
         $('verWaic').classList.remove(C.ACTIVE);
       }
-      // 恢复该版本的本地错题本
-      const wrongBookData = safeLoadJSON('ysk_wrong_' + versionName);
-      if (wrongBookData) {
-        state.wrongBook = wrongBookData;
-      } else {
-        state.wrongBook = {};
-      }
+      // 恢复该版本的本地错题本，并将旧版（全局自增）ID 迁移为稳定 ID
+      state.wrongBook = {};
+      migrateLocalWrongBook(versionName);
       // 如果之前选中的章节在新版本中不存在（跨版本章节差异），回退到「全部」
       if (state.chapter !== 'all' && !data.chapters.find((chapter) => chapter.name === state.chapter)) {
         state.chapter = 'all';
@@ -91,25 +87,63 @@
   // 云端数据同步（登录用户）
   // ============================================================
 
-  /** 拉取云端错题本和笔记，合并到本地 */
+  /**
+   * 将 localStorage 中旧版（全局自增）错题 ID 迁移为稳定 ID。
+   * 通过 buildFlat() 生成的 legacyIdMap（旧 ID → 新 ID）翻译，幂等且不丢数据。
+   */
+  function migrateLocalWrongBook(versionName) {
+    const map = S.legacyIdMap || {};
+    const wrongBookData = safeLoadJSON('ysk_wrong_' + versionName);
+    if (!wrongBookData) {
+      return;
+    }
+    let changed = false;
+    const migrated = {};
+    for (const key in wrongBookData) {
+      const newId = map[key] !== undefined ? map[key] : key;
+      if (newId !== key) {
+        changed = true;
+      }
+      migrated[newId] = true;
+    }
+    state.wrongBook = migrated;
+    if (changed) {
+      saveState();
+    }
+  }
+
+  /** 拉取云端错题本和笔记，合并到本地（旧版 ID 迁移为稳定 ID） */
   async function pullCloudData(versionName) {
     if (!window.Sync || !window.SupabaseAuth || !window.SupabaseAuth.isLoggedIn()) {
       return;
     }
     try {
+      const map = S.legacyIdMap || {};
       // 拉取云端错题
       const cloudWrong = await window.Sync.getWrongQuestions(versionName);
       if (cloudWrong && cloudWrong.length) {
-        cloudWrong.forEach(function (questionId) {
-          state.wrongBook[questionId] = true;
-        });
+        for (const questionId of cloudWrong) {
+          const newId = map[questionId] !== undefined ? map[questionId] : questionId;
+          state.wrongBook[newId] = true;
+          if (newId !== questionId) {
+            // 云端旧 ID 行 → 重写为稳定 ID，并删除旧行，避免孤儿数据
+            const q = flatQs.find((x) => x._id === newId);
+            await window.Sync.addWrongQuestion(versionName, newId, q ? q._chapter : '', q ? q._type : '');
+            await window.Sync.removeWrongQuestion(versionName, questionId);
+          }
+        }
         saveState();
       }
       // 拉取云端笔记
       const notes = await window.Sync.getNotes(versionName);
       if (notes) {
         for (const noteKey in notes) {
-          localNotes[noteKey] = notes[noteKey];
+          const newKey = map[noteKey] !== undefined ? map[noteKey] : noteKey;
+          localNotes[newKey] = notes[noteKey];
+          if (newKey !== noteKey) {
+            await window.Sync.saveNote(versionName, newKey, notes[noteKey]);
+            await window.Sync.deleteNote(versionName, noteKey);
+          }
         }
       }
     } catch (error) {
@@ -162,18 +196,25 @@
    */
   function buildFlat() {
     flatQs = [];
-    let questionIdCounter = 0;
+    // 旧版 ID（章节_题型_全局自增序号）→ 新版稳定 ID（章节_题型_本题型内序号）的迁移映射。
+    // 旧版全局自增导致题库任一处增删题都会让后续所有 _id 漂移，进而串掉错题/笔记/报错。
+    // 新版按「本题型内序号」命名，插入新题只影响本题型，跨题型不再串位。
+    const legacyIdMap = {};
+    let legacyCounter = 0;
     S.data.chapters.forEach(function (chapter) {
-      chapter.type_groups.forEach((typeGroup) => {
-        typeGroup.questions.forEach((question) => {
-          question._id = chapter.name + '_' + typeGroup.type + '_' + questionIdCounter++;
+      chapter.type_groups.forEach(function (typeGroup) {
+        typeGroup.questions.forEach(function (question, typeIndex) {
+          const legacyId = chapter.name + '_' + typeGroup.type + '_' + legacyCounter++;
+          question._id = chapter.name + '_' + typeGroup.type + '_' + typeIndex;
           question._chapter = chapter.name;
           question._type = typeGroup.type;
+          legacyIdMap[legacyId] = question._id;
           flatQs.push(question);
         });
       });
     });
     S.flatQs = flatQs;
+    S.legacyIdMap = legacyIdMap;
   }
 
   function render() {
