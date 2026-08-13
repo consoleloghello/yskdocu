@@ -27,8 +27,22 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install python-docx
-        run: pip install python-docx
+      - name: Install Python deps
+        run: pip install python-docx pytest pytest-cov
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Node deps
+        run: npm ci
+
+      - name: Run parser tests
+        run: python -m pytest tests/
+
+      - name: Run frontend smoke test
+        run: node smoke_test.mjs
 
       - name: Parse docx to JSON
         run: python scripts/parse_docx.py
