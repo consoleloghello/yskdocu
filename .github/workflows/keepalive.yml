@@ -2,9 +2,14 @@ name: Supabase Keepalive
 
 on:
   schedule:
-    # 每 5 天执行一次 (UTC 时间 8:00)，防止 7 天无活动被暂停
-    - cron: '0 8 */5 * *'
-  workflow_dispatch:  # 允许手动触发
+    # 每天执行一次 (UTC 8:00)，远早于 Supabase 免费项目 7 天无活动自动暂停的阈值。
+    # 之前用 */5（每 5 天）离 7 天阈值太近，且 GitHub Actions 定时任务可能延迟数小时，
+    # 一旦某次错过或失败，间隔就超过 7 天触发暂停警告。改为每天可留足缓冲。
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+    # 手动触发验证：GitHub 仓库页 → Actions → 左侧选 "Supabase Keepalive"
+    # → 右侧 "Run workflow" → 选择分支 → "Run workflow"。
+    # 跑完后展开该次运行看日志，应看到 "HTTP status: 200" 和 "✅ Keepalive ping successful"。
 
 jobs:
   ping:
@@ -12,21 +17,30 @@ jobs:
     steps:
       - name: Ping Supabase REST API
         run: |
+          set -euo pipefail
+
           SUPABASE_URL="https://fbzfcjvzivivupmnqqpp.supabase.co"
-          ANON_KEY="${{ secrets.SUPABASE_ANON_KEY }}"
+          # anon key 是公开密钥（安全靠 RLS），已在 js/supabase.js 中明文存在，
+          # 因此直接内联，避免依赖 GitHub Secret 缺失导致空 key 静默失败。
+          ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZiemZjanZ6aXZpdnVwbW5xcXBwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2MTgzMDIsImV4cCI6MjA5ODE5NDMwMn0.FsT5fLbAo2CjcERrNrzuWZmZmiiqXPSpZ80d9Ipf60w"
 
-          echo "Pinging Supabase project..."
+          echo "Pinging Supabase project at $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 
-          # 请求 profiles 表（轻量查询，保持数据库活跃）
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+          # 请求 profiles 表（轻量查询，产生一次真实的数据库访问，保持项目活跃）
+          HTTP_CODE=$(curl -sS -o /dev/null -w "%{http_code}" \
+            --retry 3 --retry-delay 10 --retry-all-errors \
             -H "apikey: ${ANON_KEY}" \
             -H "Authorization: Bearer ${ANON_KEY}" \
-            "${SUPABASE_URL}/rest/v1/profiles?limit=1")
+            "${SUPABASE_URL}/rest/v1/profiles?select=id&limit=1")
 
           echo "HTTP status: ${HTTP_CODE}"
 
-          if [ "${HTTP_CODE}" = "200" ] || [ "${HTTP_CODE}" = "401" ]; then
+          # anon 通过 RLS 只能读到空结果，正常应返回 200。
+          # 401 表示 key 无效/被拒绝，其余 4xx/5xx 表示服务异常，
+          # 统一视为失败并让 job 失败，以触发 GitHub 通知（而非静默忽略）。
+          if [ "${HTTP_CODE}" = "200" ]; then
             echo "✅ Keepalive ping successful"
           else
-            echo "⚠️  Unexpected response: ${HTTP_CODE}"
+            echo "❌ Unexpected response: ${HTTP_CODE}"
+            exit 1
           fi
