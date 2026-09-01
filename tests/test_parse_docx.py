@@ -525,6 +525,34 @@ class TestIntegration:
                 f'{fname} 存在缺少选项的选择题：{empty}'
             )
 
+    def test_all_questions_have_answers(self):
+        """回归测试：所有题型（重点简答题）必须解析出非空答案。
+
+        历史上内操版 docx 源文件中有多道简答题（填空题同理）的答案为空，
+        导致生成的 data/内操版.json 里这些题目 answer 为空字符串，前端无法
+        展示标准答案。该测试确保此类问题不会再次发生。
+        """
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scripts'))
+        from parse_docx import parse_docx
+
+        base = os.path.dirname(os.path.dirname(__file__))
+        for fname in ['公用工程题库（外操版）.docx', '公用工程题库（内操版）.docx']:
+            docx_path = os.path.join(base, fname)
+            if not os.path.exists(docx_path):
+                pytest.skip(f'{fname} 不存在，跳过')
+            data = parse_docx(docx_path)
+            empty = [
+                (g['type'], c['name'], q['question'])
+                for c in data['chapters']
+                for g in c['type_groups']
+                for q in g['questions']
+                if not str(q.get('answer', '')).strip()
+            ]
+            assert empty == [], (
+                f'{fname} 存在答案为空（answer 为空字符串）的题目：{empty}'
+            )
+
     def test_parse_inner_version_docx(self):
         """解析内操版题库."""
         import sys
