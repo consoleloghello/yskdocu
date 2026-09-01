@@ -497,6 +497,34 @@ class TestIntegration:
                     assert 'question' in q
                     assert 'answer' in q
 
+    def test_choice_questions_all_have_options(self):
+        """回归测试：所有选择题必须解析出非空选项。
+
+        历史上曾因 docx 源文件中首选项缺失 'A.' 前缀，导致某道选择题
+        的 options 被解析为空数组。该测试确保此类问题不会再次发生。
+        """
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scripts'))
+        from parse_docx import parse_docx
+
+        base = os.path.dirname(os.path.dirname(__file__))
+        for fname in ['公用工程题库（外操版）.docx', '公用工程题库（内操版）.docx']:
+            docx_path = os.path.join(base, fname)
+            if not os.path.exists(docx_path):
+                pytest.skip(f'{fname} 不存在，跳过')
+            data = parse_docx(docx_path)
+            empty = [
+                (c['name'], q['question'])
+                for c in data['chapters']
+                for g in c['type_groups']
+                if g['type'] == '选择题'
+                for q in g['questions']
+                if not q['options']
+            ]
+            assert empty == [], (
+                f'{fname} 存在缺少选项的选择题：{empty}'
+            )
+
     def test_parse_inner_version_docx(self):
         """解析内操版题库."""
         import sys
