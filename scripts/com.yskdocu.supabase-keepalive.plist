@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  macOS launchd 定时保活（每 6 小时一次）
+  ============================================================
+  这是一个「本机通道」，与 GitHub Actions 互为备份 ——
+  GitHub 定时任务可能延迟、丢跑，或被 GitHub 因仓库 60 天无活动而整体停用，
+  本机 launchd 不受影响。
+
+  安装：
+    1. 把下面的 REPO_PATH 改成你的项目绝对路径（默认已填）
+    2. cp scripts/com.yskdocu.supabase-keepalive.plist ~/Library/LaunchAgents/
+    3. launchctl load -w ~/Library/LaunchAgents/com.yskdocu.supabase-keepalive.plist
+    4. 立即验证： launchctl start com.yskdocu.supabase-keepalive
+       看日志：   tail -5 <REPO_PATH>/.keepalive.log
+
+  卸载：
+    launchctl unload -w ~/Library/LaunchAgents/com.yskdocu.supabase-keepalive.plist
+
+  注意：本机需要处于开机状态才会执行；笔记本长期关机时靠
+  GitHub Actions + pg_cron 那两层兜底。
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.yskdocu.supabase-keepalive</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/wangxiaotian/yskdocu/yskdocu/scripts/keepalive-cron.sh</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/wangxiaotian/yskdocu/yskdocu</string>
+
+  <!-- 每 6 小时运行一次（秒） -->
+  <key>StartInterval</key>
+  <integer>21600</integer>
+
+  <!-- 登录 / 加载时也先跑一次 -->
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/wangxiaotian/yskdocu/yskdocu/.keepalive.launchd.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/wangxiaotian/yskdocu/yskdocu/.keepalive.launchd.log</string>
+
+  <!-- 低优先级，不干扰前台使用 -->
+  <key>ProcessType</key>
+  <string>Background</string>
+</dict>
+</plist>

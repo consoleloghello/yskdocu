@@ -39,6 +39,13 @@ python scripts/parse_docx.py      # 读取根目录下的 .docx，写入 data/*.
 # 在 Supabase Dashboard → SQL Editor 中执行 scripts/init_supabase.sql
 # 如需重置数据，执行 scripts/clear_tables.sql
 
+# Supabase 保活（防免费项目 7 天无活动被暂停）
+npm run keepalive                  # 手动跑一次（写入式 ping，等价于 GitHub Actions）
+# 先在 SQL Editor 执行 scripts/keepalive.sql（一次性，幂等）
+# 本机定时：cp scripts/com.yskdocu.supabase-keepalive.plist ~/Library/LaunchAgents/
+#           launchctl load -w ~/Library/LaunchAgents/com.yskdocu.supabase-keepalive.plist
+# 查看结果：tail -5 .keepalive.log
+
 # 生成更新日志文件（部署前运行）
 node scripts/gen_changelog.mjs     # 读取最近3条 git commit，输出 data/changelog.json
 ```
@@ -76,7 +83,11 @@ node scripts/gen_changelog.mjs     # 读取最近3条 git commit，输出 data/c
 │   ├── serve.mjs              # Node.js 开发服务器
 │   ├── gen_changelog.mjs      # 生成更新日志脚本
 │   ├── init_supabase.sql      # Supabase 数据库初始化 SQL
-│   └── clear_tables.sql       # 清空所有表的数据
+│   ├── clear_tables.sql       # 清空所有表的数据
+│   ├── keepalive.sql         # 防暂停保活：keepalive 表 + keepalive_ping() RPC + pg_cron
+│   ├── keepalive.mjs         # 保活脚本（npm run keepalive），配置从 js/supabase.js 读取
+│   ├── keepalive-cron.sh     # 保活 cron 包装脚本（自行定位 node、写日志、裁剪日志）
+│   └── com.yskdocu.supabase-keepalive.plist  # macOS launchd 定时任务模板（每 6 小时）
 ├── tests/
 │   ├── conftest.py            # pytest 夹具（MockParagraph, MockRun）
 │   └── test_parse_docx.py     # 解析器单元测试 + 端到端集成测试
@@ -256,6 +267,35 @@ const CSS = {
 所有表通过 `user_id` 关联 Supabase Auth 用户，启用 RLS（Row Level Security）保证用户只能读写自己的数据。
 
 此外定义了一个 RPC 函数 `get_answer_stats(text)`，在数据库端按章节聚合 `answer_history`（前端 `sync.js` 的 `getStats` 调用），避免分页拉全表再统计。
+
+## Supabase 保活（防免费项目自动暂停）
+
+免费版项目若「一周内没有足够的用户数据库活动」会被自动暂停（暂停后 1 年内可 Resume，超期永久删除）。
+
+**关键结论：只读 SELECT 不足以保活。** 对 PostgREST 发只读查询（尤其 RLS 过滤后返回空数组，或请求 `/rest/v1/` 根路径）不会重置不活跃计时器 —— 即使 workflow 每天跑成功、HTTP 200，项目依旧会收到暂停警告邮件。必须产生一次**真实写入**（UPDATE/INSERT）。
+
+三层保活（冗余设计，任一存活即可）：
+
+| 层 | 载体 | 频率 | 失效场景 |
+|---|---|---|---|
+| 1 | `.github/workflows/keepalive.yml` → RPC `keepalive_ping()` | 每 6 小时 | GitHub 定时任务延迟/丢跑；仓库 60 天无活动被停用 |
+| 2 | `scripts/keepalive.mjs` + launchd/cron | 每 6 小时 | 本机长期关机 |
+| 3 | `pg_cron` 任务 `supabase-keepalive` | 每 6 小时 | 数据库已暂停时也不执行 |
+
+数据库侧（`scripts/keepalive.sql`，已并入 `init_supabase.sql` 第十二节）：
+
+- `public.keepalive` —— 单行表（`id=1`），记录 `last_ping` / `ping_count` / `source`，启用 RLS 且**不建策略**，anon/authenticated 无法直接读写
+- `public.keepalive_ping(p_source text)` —— `SECURITY DEFINER`，UPSERT 那一行（表归属 postgres，绕过 RLS），内置 60 秒节流（防止公开 anon key 被滥用刷写），返回 `{ok, throttled, last_ping, ping_count}`
+- 权限：`REVOKE ... FROM public` 后只 `GRANT EXECUTE ... TO anon, authenticated`
+
+运维：
+
+- 失败时 workflow 自动开/更新带 `keepalive` 标签的 GitHub Issue（不再静默失败）
+- 本机日志：`.keepalive.log`（已被 .gitignore 忽略，自动裁剪至 2000 行）
+- 手动验证：`npm run keepalive`，或在 SQL Editor 执行 `SELECT public.keepalive_ping('manual-test');`
+- 排查顺序：404 → 未执行 `keepalive.sql`；401/403 → anon key 已轮换（需同步 `js/supabase.js` 与 workflow）；5xx/000 → 项目可能已被暂停，去 Dashboard Resume
+
+`scripts/gen_changelog.mjs`、`scripts/compress_data.mjs` 与保活无关，不涉及。
 
 ## 关键约束
 

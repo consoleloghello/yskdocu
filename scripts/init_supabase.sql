@@ -236,6 +236,62 @@ GRANT EXECUTE ON FUNCTION public.get_answer_stats(text) TO authenticated;
 REVOKE EXECUTE ON FUNCTION public.get_answer_stats(text) FROM anon;
 
 -- ============================================================
+-- 十二、防暂停保活（可选，但免费版强烈建议）
+-- 详见 scripts/keepalive.sql，这里是精简版；两者幂等，执行任何一个即可。
+-- 为什么需要：Supabase 免费项目「一周内没有足够的用户数据库活动」会被自动暂停。
+-- 只读 SELECT（RLS 过滤后返回空数组）不足以重置计时器，必须产生一次真实写入。
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.keepalive (
+  id         int PRIMARY KEY,
+  last_ping  timestamptz NOT NULL DEFAULT now(),
+  ping_count bigint      NOT NULL DEFAULT 0,
+  source     text
+);
+
+ALTER TABLE public.keepalive ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.keepalive FROM anon, authenticated;
+
+INSERT INTO public.keepalive (id, last_ping, ping_count, source)
+VALUES (1, now(), 0, 'init')
+ON CONFLICT (id) DO NOTHING;
+
+CREATE OR REPLACE FUNCTION public.keepalive_ping(p_source text DEFAULT 'unknown')
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_last  timestamptz;
+  v_count bigint;
+BEGIN
+  SELECT last_ping, ping_count
+    INTO v_last, v_count
+    FROM public.keepalive
+   WHERE id = 1
+     AND last_ping > now() - interval '60 seconds';
+
+  IF FOUND THEN
+    RETURN jsonb_build_object('ok', true, 'throttled', true,
+                              'last_ping', v_last, 'ping_count', v_count);
+  END IF;
+
+  UPDATE public.keepalive
+     SET last_ping  = now(),
+         ping_count = ping_count + 1,
+         source     = coalesce(p_source, 'unknown')
+   WHERE id = 1
+  RETURNING last_ping, ping_count INTO v_last, v_count;
+
+  RETURN jsonb_build_object('ok', true, 'throttled', false,
+                            'last_ping', v_last, 'ping_count', v_count);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.keepalive_ping(text) FROM public;
+GRANT EXECUTE ON FUNCTION public.keepalive_ping(text) TO anon, authenticated;
+
+-- ============================================================
 -- 初始化完成
 -- ============================================================
 -- 验证：执行以下查询确认表已创建
@@ -246,4 +302,6 @@ REVOKE EXECUTE ON FUNCTION public.get_answer_stats(text) FROM anon;
 -- 下一步：
 --   1. Authentication → Sign In / Providers → 确认 Email 已启用（注册走邮箱 OTP 验证码）
 --   2. 将 SUPABASE_URL 和 SUPABASE_ANON_KEY 填入 js/supabase.js
+--   3. 保活验证：SELECT public.keepalive_ping('manual-test'); 应返回 ok=true
+--      或本地执行 npm run keepalive
 -- ============================================================

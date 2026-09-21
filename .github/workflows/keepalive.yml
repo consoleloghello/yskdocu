@@ -1,46 +1,161 @@
 name: Supabase Keepalive
 
+# Supabase 免费项目「一周内没有足够的用户数据库活动」会被自动暂停。
+#
+# 本 workflow 的关键点（都是踩过坑之后才改对的）：
+#   1. 只发只读 SELECT（尤其 RLS 过滤后返回空数组、或请求 /rest/v1/ 根路径）
+#      不足以重置不活跃计时器 —— 项目仍会收到暂停警告。
+#      因此改为调用 public.keepalive_ping()，产生一次真实的 UPDATE 写入。
+#      → 需要先在 Supabase SQL Editor 执行 scripts/keepalive.sql（一次性）。
+#   2. 频率从「每天 1 次」提高到「每 6 小时 1 次」。官方口径是
+#      「每天几次用户请求」，1 次/天太贴近阈值，且 GitHub 定时任务本身
+#      可能延迟数小时甚至丢跑。
+#   3. 失败时自动开 GitHub Issue，避免静默失败（之前失败过一次没人知道）。
+
 on:
   schedule:
-    # 每天执行一次 (UTC 8:00)，远早于 Supabase 免费项目 7 天无活动自动暂停的阈值。
-    # 之前用 */5（每 5 天）离 7 天阈值太近，且 GitHub Actions 定时任务可能延迟数小时，
-    # 一旦某次错过或失败，间隔就超过 7 天触发暂停警告。改为每天可留足缓冲。
-    - cron: '0 8 * * *'
+    # 每 6 小时 (UTC 0/6/12/18 点) → 每天 4 次，一周约 28 次
+    - cron: '0 */6 * * *'
   workflow_dispatch:
     # 手动触发验证：GitHub 仓库页 → Actions → 左侧选 "Supabase Keepalive"
-    # → 右侧 "Run workflow" → 选择分支 → "Run workflow"。
-    # 跑完后展开该次运行看日志，应看到 "HTTP status: 200" 和 "✅ Keepalive ping successful"。
+    # → 右侧 "Run workflow"。跑完看日志应出现 "✅ Keepalive write succeeded"。
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/keepalive.yml'
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  SUPABASE_URL: https://fbzfcjvzivivupmnqqpp.supabase.co
+  # anon key 是公开密钥（安全靠 RLS），已在 js/supabase.js 中明文存在，
+  # 因此直接内联，避免 GitHub Secret 缺失导致空 key 静默失败。
+  SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZiemZjanZ6aXZpdnVwbW5xcXBwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2MTgzMDIsImV4cCI6MjA5ODE5NDMwMn0.FsT5fLbAo2CjcERrNrzuWZmZmiiqXPSpZ80d9Ipf60w
 
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping Supabase REST API
+      - name: Ping Supabase (write-based keepalive)
         run: |
           set -euo pipefail
 
-          SUPABASE_URL="https://fbzfcjvzivivupmnqqpp.supabase.co"
-          # anon key 是公开密钥（安全靠 RLS），已在 js/supabase.js 中明文存在，
-          # 因此直接内联，避免依赖 GitHub Secret 缺失导致空 key 静默失败。
-          ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZiemZjanZ6aXZpdnVwbW5xcXBwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2MTgzMDIsImV4cCI6MjA5ODE5NDMwMn0.FsT5fLbAo2CjcERrNrzuWZmZmiiqXPSpZ80d9Ipf60w"
-
           echo "Pinging Supabase project at $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 
-          # 请求 profiles 表（轻量查询，产生一次真实的数据库访问，保持项目活跃）
-          HTTP_CODE=$(curl -sS -o /dev/null -w "%{http_code}" \
+          # POST /rest/v1/rpc/keepalive_ping → 函数内做一次 UPDATE（真实写入）
+          BODY_FILE=$(mktemp)
+          HTTP_CODE=$(curl -sS -o "$BODY_FILE" -w "%{http_code}" \
             --retry 3 --retry-delay 10 --retry-all-errors \
-            -H "apikey: ${ANON_KEY}" \
-            -H "Authorization: Bearer ${ANON_KEY}" \
-            "${SUPABASE_URL}/rest/v1/profiles?select=id&limit=1")
+            -X POST \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{"p_source":"github-actions"}' \
+            "${SUPABASE_URL}/rest/v1/rpc/keepalive_ping" || echo "000")
 
+          BODY=$(cat "$BODY_FILE")
           echo "HTTP status: ${HTTP_CODE}"
+          echo "Response: ${BODY}"
 
-          # anon 通过 RLS 只能读到空结果，正常应返回 200。
-          # 401 表示 key 无效/被拒绝，其余 4xx/5xx 表示服务异常，
-          # 统一视为失败并让 job 失败，以触发 GitHub 通知（而非静默忽略）。
-          if [ "${HTTP_CODE}" = "200" ]; then
-            echo "✅ Keepalive ping successful"
-          else
-            echo "❌ Unexpected response: ${HTTP_CODE}"
-            exit 1
+          if [ "${HTTP_CODE}" = "200" ] && printf '%s' "${BODY}" | grep -q '"ok":true'; then
+            echo "✅ Keepalive write succeeded"
+            exit 0
           fi
+
+          if [ "${HTTP_CODE}" = "404" ]; then
+            echo "::error::keepalive_ping() 不存在。请在 Supabase Dashboard → SQL Editor 执行 scripts/keepalive.sql（一次性）。"
+          fi
+
+          # 兜底：至少发一次只读查询，聊胜于无（但已知不足以阻止暂停）
+          FALLBACK_CODE=$(curl -sS -o /dev/null -w "%{http_code}" \
+            --retry 2 --retry-delay 5 --retry-all-errors \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
+            "${SUPABASE_URL}/rest/v1/wrong_questions?select=id&limit=1" || echo "000")
+          echo "Fallback read status: ${FALLBACK_CODE}"
+          echo "::warning::写入式保活失败（HTTP ${HTTP_CODE}），已退回只读 ping；只读 ping 无法可靠阻止项目暂停。"
+
+          exit 1
+
+      - name: Report failure as GitHub Issue
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = '⚠️ Supabase Keepalive 失败';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              `保活任务在 ${new Date().toISOString()} 失败。`,
+              '',
+              `- 运行日志：${runUrl}`,
+              `- 若是 404：说明 \`public.keepalive_ping()\` 不存在，需在 Supabase SQL Editor 执行 \`scripts/keepalive.sql\`。`,
+              `- 若是 401/403：anon key 可能已轮换，需同步更新 \`.github/workflows/keepalive.yml\` 与 \`js/supabase.js\`。`,
+              `- 若是 5xx / 000：项目可能已经被暂停，需到 Supabase Dashboard 手动 Resume。`,
+            ].join('\n');
+
+            const open = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'keepalive',
+            });
+
+            if (open.data.length === 0) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['keepalive'],
+              });
+            } else {
+              // 同一个 Issue 最多每 20 小时追加一条评论，避免每 6 小时刷屏
+              const issue = open.data[0];
+              const comments = await github.rest.issues.listComments({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                per_page: 1,
+                sort: 'created',
+                direction: 'desc',
+              });
+              const last = comments.data[0];
+              const recent =
+                last && Date.now() - new Date(last.created_at).getTime() < 20 * 60 * 60 * 1000;
+              if (!recent) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  body,
+                });
+              }
+            }
+
+      - name: Auto-close the alert Issue on recovery
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const open = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'keepalive',
+            });
+            for (const issue of open.data) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: `✅ 保活已恢复（${new Date().toISOString()}），自动关闭。`,
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                state: 'closed',
+              });
+            }

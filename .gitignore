@@ -6,5 +6,7 @@ dist/
 
 nul
 .coverage
+.keepalive.log
+.keepalive.launchd.log
 .pi/
 .pi-subagents/
