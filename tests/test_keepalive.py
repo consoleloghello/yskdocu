@@ -147,6 +147,37 @@ class TestKeepaliveWorkflow:
     def test_has_manual_dispatch(self):
         assert "workflow_dispatch" in read(WORKFLOW)
 
+    def test_no_readonly_ping_fallback(self):
+        """旧的只读保活必须彻底删干净，不能以任何降级/兜底形式残留。
+
+        只读 SELECT 已实测无法重置 Supabase 不活跃计时器，
+        留着降级路径只会静默掩盖故障。
+        """
+        wf = read(WORKFLOW)
+        # 允许出现在注释里的「踩坑说明」，但不得出现在可执行命令里
+        commands = [
+            ln.strip()
+            for ln in wf.splitlines()
+            if ln.strip() and not ln.strip().startswith("#")
+        ]
+        joined = "\n".join(commands)
+        assert "select=id" not in joined, "残留只读 SELECT 保活命令"
+        assert "/rest/v1/profiles" not in joined, "残留旧的 profiles 只读 ping"
+        assert "Fallback read" not in joined, "残留只读降级路径"
+        assert joined.count("curl") == 1, f"保活只应有一次 curl 调用，实际 {joined.count('curl')} 次"
+
+    def test_failure_is_fatal_and_diagnosed(self):
+        """失败必须非零退出并按状态码给出定位提示。"""
+        wf = read(WORKFLOW)
+        assert "exit 1" in wf
+        for code in ("404", "401|403", "5??"):
+            assert code in wf, f"缺少 HTTP {code} 的定位提示"
+
+    def test_normalizes_http_code(self):
+        """curl 失败时 -w 会输出 000，避免拼接出 000000 之类的脏值。"""
+        wf = read(WORKFLOW)
+        assert 'HTTP_CODE="${HTTP_CODE: -3}"' in wf
+
     def test_checks_response_body_not_just_status(self):
         wf = read(WORKFLOW)
         assert '"ok":true' in wf, "需要校验返回体，避免 200 但实际未写入"

@@ -274,6 +274,8 @@ const CSS = {
 
 **关键结论：只读 SELECT 不足以保活。** 对 PostgREST 发只读查询（尤其 RLS 过滤后返回空数组，或请求 `/rest/v1/` 根路径）不会重置不活跃计时器 —— 即使 workflow 每天跑成功、HTTP 200，项目依旧会收到暂停警告邮件。必须产生一次**真实写入**（UPDATE/INSERT）。
 
+> 旧版实现（`GET /rest/v1/profiles?select=id`）已**彻底删除**，包括「失败时退回只读 ping」的降级路径 —— 只读 ping 无效，保留它只会静默掩盖故障。现在保活失败即失败，直接开 Issue 告警。
+
 三层保活（冗余设计，任一存活即可）：
 
 | 层 | 载体 | 频率 | 失效场景 |
@@ -290,7 +292,7 @@ const CSS = {
 
 运维：
 
-- 失败时 workflow 自动开/更新带 `keepalive` 标签的 GitHub Issue（不再静默失败）
+- 失败时 workflow 自动开/更新带 `keepalive` 标签的 GitHub Issue（不再静默失败），恢复后自动关闭；失败按状态码给出定位提示（404/401/403/5xx/000）
 - 本机日志：`.keepalive.log`（已被 .gitignore 忽略，自动裁剪至 2000 行）
 - 手动验证：`npm run keepalive`，或在 SQL Editor 执行 `SELECT public.keepalive_ping('manual-test');`
 - 排查顺序：404 → 未执行 `keepalive.sql`；401/403 → anon key 已轮换（需同步 `js/supabase.js` 与 workflow）；5xx/000 → 项目可能已被暂停，去 Dashboard Resume

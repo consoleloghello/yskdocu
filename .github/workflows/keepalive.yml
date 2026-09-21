@@ -3,14 +3,17 @@ name: Supabase Keepalive
 # Supabase 免费项目「一周内没有足够的用户数据库活动」会被自动暂停。
 #
 # 本 workflow 的关键点（都是踩过坑之后才改对的）：
-#   1. 只发只读 SELECT（尤其 RLS 过滤后返回空数组、或请求 /rest/v1/ 根路径）
-#      不足以重置不活跃计时器 —— 项目仍会收到暂停警告。
-#      因此改为调用 public.keepalive_ping()，产生一次真实的 UPDATE 写入。
+#   1. 【已删除】旧版发的是 GET /rest/v1/profiles?select=id —— 只读 SELECT，
+#      经 RLS 过滤后返回空数组 []。实测：这种请求不重置不活跃计时器。
+#      结果是 workflow 每天 success、HTTP 200，项目却照样收到暂停警告邮件。
+#      现已彻底移除该路径（连同“失败时退回只读 ping”的兜底），
+#      改为调用 public.keepalive_ping()，函体内做一次真实 UPDATE 写入。
 #      → 需要先在 Supabase SQL Editor 执行 scripts/keepalive.sql（一次性）。
 #   2. 频率从「每天 1 次」提高到「每 6 小时 1 次」。官方口径是
 #      「每天几次用户请求」，1 次/天太贴近阈值，且 GitHub 定时任务本身
 #      可能延迟数小时甚至丢跑。
 #   3. 失败时自动开 GitHub Issue，避免静默失败（之前失败过一次没人知道）。
+#      只读 ping 既然无效，就不再作为降级路径 —— 失败就失败，直接报警。
 
 on:
   schedule:
@@ -46,6 +49,8 @@ jobs:
 
           # POST /rest/v1/rpc/keepalive_ping → 函数内做一次 UPDATE（真实写入）
           BODY_FILE=$(mktemp)
+          # 注意：curl 自身失败时 -w 也会输出 000，与 || echo "000" 拼接会变成 000000，
+          # 所以统一用 `|| true` 接住退出码，再取末 3 位。
           HTTP_CODE=$(curl -sS -o "$BODY_FILE" -w "%{http_code}" \
             --retry 3 --retry-delay 10 --retry-all-errors \
             -X POST \
@@ -53,7 +58,9 @@ jobs:
             -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
             -H "Content-Type: application/json" \
             -d '{"p_source":"github-actions"}' \
-            "${SUPABASE_URL}/rest/v1/rpc/keepalive_ping" || echo "000")
+            "${SUPABASE_URL}/rest/v1/rpc/keepalive_ping" 2>/dev/null) || true
+          HTTP_CODE="${HTTP_CODE: -3}"
+          HTTP_CODE="${HTTP_CODE:-000}"
 
           BODY=$(cat "$BODY_FILE")
           echo "HTTP status: ${HTTP_CODE}"
@@ -64,18 +71,15 @@ jobs:
             exit 0
           fi
 
-          if [ "${HTTP_CODE}" = "404" ]; then
-            echo "::error::keepalive_ping() 不存在。请在 Supabase Dashboard → SQL Editor 执行 scripts/keepalive.sql（一次性）。"
-          fi
-
-          # 兜底：至少发一次只读查询，聊胜于无（但已知不足以阻止暂停）
-          FALLBACK_CODE=$(curl -sS -o /dev/null -w "%{http_code}" \
-            --retry 2 --retry-delay 5 --retry-all-errors \
-            -H "apikey: ${SUPABASE_ANON_KEY}" \
-            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
-            "${SUPABASE_URL}/rest/v1/wrong_questions?select=id&limit=1" || echo "000")
-          echo "Fallback read status: ${FALLBACK_CODE}"
-          echo "::warning::写入式保活失败（HTTP ${HTTP_CODE}），已退回只读 ping；只读 ping 无法可靠阻止项目暂停。"
+          # 失败即失败，不再退回只读 ping —— 只读查询已被证实无法阻止暂停，
+          # 保留降级路径只会掩盖问题、把告警拖到下一次暂停邮件。
+          case "${HTTP_CODE}" in
+            404)     echo "::error::public.keepalive_ping() 不存在 → 执行 scripts/keepalive.sql" ;;
+            401|403) echo "::error::anon key 被拒绝 → 可能已轮换，同步 js/supabase.js 与本文件" ;;
+            000)     echo "::error::网络不可达 → 项目可能已被暂停，去 Supabase Dashboard Resume" ;;
+            5??)     echo "::error::服务端错误 → 项目可能已被暂停，去 Supabase Dashboard Resume" ;;
+            *)       echo "::error::保活写入失败（HTTP ${HTTP_CODE}）" ;;
+          esac
 
           exit 1
 
