@@ -403,6 +403,61 @@ class TestWorkflowShellAgainstRealisticResponses:
 
 
 # ============================================================
+# pg_cron 诊断示例 SQL 的正确性
+#
+# 背景：文档里写了一句 `SELECT jobname, status, start_time FROM
+# cron.job_run_details`，用户直接拿去执行，报
+#   42703: column "jobname" does not exist
+# 官方 README 给出的 cron.job_run_details 列清单是：
+#   jobid, runid, job_pid, database, username, command, status,
+#   return_message, start_time, end_time  —— 根本没有 jobname。
+# 要显示任务名必须 JOIN cron.job。文档里的 SQL 也得当代码测。
+# ============================================================
+
+class TestPgCronDiagnosticSql:
+    FILES = (
+        ROOT / "scripts" / "keepalive.sql",
+        ROOT / "scripts" / "init_supabase.sql",
+        ROOT / "AGENTS.md",
+    )
+
+    @staticmethod
+    def _blocks(text, needle, before=6, after=8):
+        """取包含 needle 的行及其上下文，作为一条语句来看。"""
+        lines = text.splitlines()
+        for i, line in enumerate(lines):
+            if needle in line:
+                yield "\n".join(lines[max(0, i - before) : i + after + 1])
+
+    def test_files_exist(self):
+        for path in self.FILES:
+            assert path.exists(), path
+
+    def test_no_bare_jobname_selected_from_job_run_details(self):
+        """不能直接 SELECT jobname FROM cron.job_run_details（会报 42703）。"""
+        bad = re.compile(r"\bjobname\b[^;\n]*\bFROM\s+cron\.job_run_details", re.I)
+        for path in self.FILES:
+            for block in self._blocks(path.read_text(encoding="utf-8"), "job_run_details"):
+                assert not bad.search(block), (
+                    f"{path.name}: cron.job_run_details 没有 jobname 列，必须 JOIN cron.job\n{block}"
+                )
+
+    def test_documented_history_query_joins_cron_job(self):
+        """查执行历史的示例必须 JOIN cron.job 才拿得到任务名。"""
+        text = read(ROOT / "scripts" / "keepalive.sql")
+        blocks = [b for b in self._blocks(text, "job_run_details")]
+        assert blocks, "keepalive.sql 应保留一条查看 pg_cron 执行历史的示例"
+        assert any(re.search(r"JOIN\s+cron\.job\b", b, re.I) for b in blocks), (
+            "查看执行历史的示例需要 JOIN cron.job"
+        )
+
+    def test_documents_the_pitfall_inline(self):
+        """把坑写在示例旁边，避免后来者再改回裸 jobname。"""
+        text = read(ROOT / "scripts" / "keepalive.sql")
+        assert "没有 jobname" in text
+
+
+# ============================================================
 # 与前端配置保持一致
 # ============================================================
 

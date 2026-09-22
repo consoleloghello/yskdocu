@@ -113,14 +113,29 @@ SELECT cron.schedule(
 -- ------------------------------------------------------------
 -- 四、验证
 -- ------------------------------------------------------------
--- 在 SQL Editor 里直接调用一次，应返回 ok=true 的 JSON：
---   SELECT public.keepalive_ping('manual-test');
+-- 1) 直接调用一次，应返回 ok=true 的 JSON：
+--    SELECT public.keepalive_ping('manual-test');
 --
--- 查看保活记录：
---   SELECT id, last_ping, ping_count, source, now() - last_ping AS ago
---   FROM public.keepalive;
+-- 2) 查看保活记录（谁在保活、多久没跑）：
+--    SELECT id, last_ping, ping_count, source, now() - last_ping AS ago
+--    FROM public.keepalive;
 --
--- 查看 pg_cron 执行历史：
---   SELECT jobname, status, start_time FROM cron.job_run_details
---   ORDER BY start_time DESC LIMIT 10;
+-- 3) 查看 pg_cron 任务是否已注册（应返回 1 行，active = true）：
+--    SELECT jobid, jobname, schedule, active, command
+--    FROM cron.job
+--    WHERE jobname = 'supabase-keepalive';
+--
+-- 4) 查看 pg_cron 执行历史。
+--    注意：cron.job_run_details 只有 jobid，【没有 jobname 列】，
+--    想显示任务名必须 JOIN cron.job，否则报 42703:
+--      column "jobname" does not exist
+--    刚建完任务是查不到记录的（下一次触发在 UTC 0:17 / 6:17 / 12:17 / 18:17）。
+--    SELECT j.jobname, d.status, d.start_time, d.end_time, d.return_message
+--    FROM cron.job_run_details d
+--    LEFT JOIN cron.job j ON j.jobid = d.jobid
+--    ORDER BY d.start_time DESC
+--    LIMIT 10;
+--
+-- 5) 若确认 pg_cron 没有生效，可删掉该任务（不影响其余两层保活）：
+--    SELECT cron.unschedule('supabase-keepalive');
 -- ------------------------------------------------------------
