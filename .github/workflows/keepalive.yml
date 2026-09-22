@@ -51,8 +51,11 @@ jobs:
           BODY_FILE=$(mktemp)
           # 注意：curl 自身失败时 -w 也会输出 000，与 || echo "000" 拼接会变成 000000，
           # 所以统一用 `|| true` 接住退出码，再取末 3 位。
+          # 重试参数可用环境变量覆盖（测试时置 0，避免等待）。
+          CURL_RETRY="${KEEPALIVE_CURL_RETRY:-3}"
+          CURL_RETRY_DELAY="${KEEPALIVE_CURL_RETRY_DELAY:-10}"
           HTTP_CODE=$(curl -sS -o "$BODY_FILE" -w "%{http_code}" \
-            --retry 3 --retry-delay 10 --retry-all-errors \
+            --retry "${CURL_RETRY}" --retry-delay "${CURL_RETRY_DELAY}" --retry-all-errors \
             -X POST \
             -H "apikey: ${SUPABASE_ANON_KEY}" \
             -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
@@ -66,7 +69,7 @@ jobs:
           echo "HTTP status: ${HTTP_CODE}"
           echo "Response: ${BODY}"
 
-          if [ "${HTTP_CODE}" = "200" ] && printf '%s' "${BODY}" | grep -q '"ok":true'; then
+          if [ "${HTTP_CODE}" = "200" ] && printf '%s' "${BODY}" | grep -qE '"ok"[[:space:]]*:[[:space:]]*true'; then
             echo "✅ Keepalive write succeeded"
             exit 0
           fi

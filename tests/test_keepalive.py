@@ -178,9 +178,19 @@ class TestKeepaliveWorkflow:
         wf = read(WORKFLOW)
         assert 'HTTP_CODE="${HTTP_CODE: -3}"' in wf
 
+    def test_retry_defaults_are_unchanged(self):
+        """测试用的重试开关不能把生产默认值改弱。"""
+        wf = read(WORKFLOW)
+        assert "${KEEPALIVE_CURL_RETRY:-3}" in wf
+        assert "${KEEPALIVE_CURL_RETRY_DELAY:-10}" in wf
+
     def test_checks_response_body_not_just_status(self):
         wf = read(WORKFLOW)
-        assert '"ok":true' in wf, "需要校验返回体，避免 200 但实际未写入"
+        # Supabase 的 jsonb 返回带空格：{"ok": true, ...}，判断必须容忍空白字符。
+        # 历史 bug：写成 '"ok":true'（无空格），导致写入成功却报失败。
+        assert "grep -qE" in wf, "需要校验返回体，避免 200 但实际未写入"
+        assert "[[:space:]]*:[[:space:]]*true" in wf, "正则必须容忍 jsonb 的空格"
+        assert '"ok":true' not in wf, "不允许无空格的严格匹配"
 
     def test_alerts_on_failure(self):
         wf = read(WORKFLOW)
@@ -258,6 +268,138 @@ class TestLocalKeepsAlive:
     def test_npm_script_registered(self):
         pkg = json.loads(read(PKG))
         assert "keepalive" in pkg["scripts"]
+
+
+# ============================================================
+# workflow 内嵌 shell 的端到端回归测试
+#
+# 背景：曾经用「紧凑 JSON」（{"ok":true}）做 mock，而 Supabase 的 jsonb
+# 实际返回是带空格的（{"ok": true}），于是 `grep '"ok":true'` 永远不匹配 ——
+# RPC 明明写入成功（HTTP 200 / ping_count 递增），workflow 却报失败。
+# 所以这里必须用“真实际格式”的响应体来跑真实 shell。
+# ============================================================
+
+class TestWorkflowShellAgainstRealisticResponses:
+    @staticmethod
+    def _serve(body: str, status: int = 200):
+        """起一个本地 HTTP mock，返回指定状态码与响应体。"""
+        import http.server
+        import threading
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):  # noqa: N802
+                length = int(self.headers.get("Content-Length") or 0)
+                self.rfile.read(length)
+                payload = body.encode()
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            def log_message(self, *_args):
+                pass
+
+        server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        return server, server.server_address[1]
+
+    @staticmethod
+    def _run_workflow_step(port: int, supabase_url: str | None = None):
+        import subprocess
+        import tempfile
+
+        wf = read(WORKFLOW)
+        script = wf.split("run: |\n", 1)[1].split("\n      - name:", 1)[0]
+        script = "\n".join(
+            line[10:] if line.startswith("          ") else line
+            for line in script.splitlines()
+        )
+
+        with tempfile.NamedTemporaryFile("w", suffix=".sh", delete=False) as f:
+            f.write(script)
+            path = f.name
+
+        env = {
+            "PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin",
+            "SUPABASE_URL": supabase_url or f"http://127.0.0.1:{port}",
+            "SUPABASE_ANON_KEY": "test-key",
+            # 关掉重试，否则失败用例要等 30s+
+            "KEEPALIVE_CURL_RETRY": "0",
+            "KEEPALIVE_CURL_RETRY_DELAY": "0",
+        }
+        return subprocess.run(
+            ["bash", path], capture_output=True, text=True, timeout=120, env=env
+        )
+
+    @staticmethod
+    def _require_tools():
+        import shutil
+
+        pytest = __import__("pytest")
+        if not shutil.which("bash") or not shutil.which("curl"):
+            pytest.skip("需要 bash 与 curl")
+
+    def test_succeeds_on_realistic_spaced_json(self):
+        """Supabase 真实返回格式（jsonb 带空格）必须判成功。"""
+        self._require_tools()
+        body = '{"ok": true, "throttled": false, "last_ping": "2026-09-22T11:32:17.349952+00:00", "ping_count": 2}'
+        server, port = self._serve(body)
+        try:
+            result = self._run_workflow_step(port)
+        finally:
+            server.shutdown()
+        assert result.returncode == 0, f"应判成功，实际退码 {result.returncode}\n{result.stdout}"
+        assert "✅ Keepalive write succeeded" in result.stdout
+
+    def test_succeeds_when_throttled(self):
+        """命中 60 秒节流也是 ok:true（说明刚刚已有写入），应判成功。"""
+        self._require_tools()
+        body = '{"ok": true, "throttled": true, "last_ping": "2026-09-22T11:32:17+00:00", "ping_count": 2}'
+        server, port = self._serve(body)
+        try:
+            result = self._run_workflow_step(port)
+        finally:
+            server.shutdown()
+        assert result.returncode == 0, result.stdout
+
+    def test_fails_on_ok_false(self):
+        """HTTP 200 但 ok:false 必须判失败（不能只看状态码）。"""
+        self._require_tools()
+        server, port = self._serve('{"ok": false}')
+        try:
+            result = self._run_workflow_step(port)
+        finally:
+            server.shutdown()
+        assert result.returncode == 1, result.stdout
+
+    def test_fails_on_404_with_pointer_to_sql(self):
+        self._require_tools()
+        server, port = self._serve('{"message":"Not found"}', status=404)
+        try:
+            result = self._run_workflow_step(port)
+        finally:
+            server.shutdown()
+        assert result.returncode == 1
+        assert "keepalive.sql" in result.stdout
+
+    def test_fails_on_5xx_with_resume_hint(self):
+        self._require_tools()
+        server, port = self._serve("boom", status=503)
+        try:
+            result = self._run_workflow_step(port)
+        finally:
+            server.shutdown()
+        assert result.returncode == 1
+        assert "Resume" in result.stdout
+
+    def test_fails_when_unreachable(self):
+        """连接失败应归一化为 000，而不是 000000 这类脏值。"""
+        self._require_tools()
+        result = self._run_workflow_step(0, supabase_url="http://127.0.0.1:1")
+        assert result.returncode == 1
+        assert "HTTP status: 000" in result.stdout, result.stdout
 
 
 # ============================================================
