@@ -302,7 +302,7 @@ const CSS = {
 > 1. **不能用只读 SELECT 保活。** `GET /rest/v1/profiles?select=id` 即使返回 200 也不重置计时器，现在已无任何只读降级路径。
 > 2. **判定成功不能写死紧凑 JSON。** PostgREST 的 jsonb 返回是 `{"ok": true}`（**冒号后有空格**），`grep '"ok":true'` 会永远失配 —— 表现为写入明明成功（HTTP 200、`ping_count` 递增）却报失败。必须用 `[[:space:]]*` 容忍空白，或用 `JSON.parse`（`keepalive.mjs` 用的是后者）。
 >    用 mock 自测时务必**照抄真实响应格式**，否则 mock 会替你掩盖 bug；`TestWorkflowShellAgainstRealisticResponses` 就是为此而写。
-> 3. **文档里的 SQL 也是代码。** 曾在示例里写 `SELECT jobname FROM cron.job_run_details`，用户复制后报 `42703`——该表只有 `jobid`，任务名要 JOIN `cron.job`。`TestPgCronDiagnosticSql` 现在会检查文档里的 SQL。
+> 3. **文档里的 SQL 也是代码。** 曾在示例里把 `jobname` 当成 `cron.job_run_details` 的列直接查，用户复制后报 `42703`（该表只有 `jobid`，任务名必须 JOIN `cron.job`）。`TestPgCronDiagnosticSql` 现在会检查文档里的 SQL。
 > 4. **Node 的 `fetch` 不走代理。** 本机开着 clash（`http_proxy` 已设）时 `keepalive.mjs` 一直 `fetch failed`，而 curl 正常——本机保活通道实际上从未工作过。现改为有代理时走 curl。
 >    网络层失败也不能暗示「项目已被暂停」（会把人往错方向引）。
 
