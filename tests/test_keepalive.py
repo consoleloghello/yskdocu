@@ -269,6 +269,42 @@ class TestLocalKeepsAlive:
         pkg = json.loads(read(PKG))
         assert "keepalive" in pkg["scripts"]
 
+    def test_handles_proxy_via_curl(self):
+        """Node 的 fetch 不读 *_PROXY，有代理时必须走 curl。
+
+        历史 bug：本机开着 clash（http_proxy 已设）时，脚本一直
+        "fetch failed"，而 curl 却正常 —— 本机保活通道实际上从未工作过。
+        """
+        src = read(SCRIPT_MJS)
+        assert "proxyFromEnv" in src
+        assert "callViaCurl" in src
+        assert "spawnSync('curl'" in src or 'spawnSync("curl"' in src
+        assert "不读取" in src and "http_proxy" in src, "注释里应说清 fetch 不读代理变量这件事"
+
+    def test_distinguishes_network_error_from_paused_project(self):
+        """网络失败不能暗示「项目已被暂停」（曾因此误导排查方向）。"""
+        src = read(SCRIPT_MJS)
+        assert "请求未能发出" in src
+        assert "不代表项目异常" in src
+
+    def test_node_unit_tests_pass(self):
+        """传输层选择逻辑用 node 自测（零依赖，见 tests/keepalive_script_test.mjs）。"""
+        import shutil
+        import subprocess
+
+        if not shutil.which("node"):
+            __import__("pytest").skip("需要 node")
+
+        result = subprocess.run(
+            ["node", "tests/keepalive_script_test.mjs"],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            cwd=ROOT,
+        )
+        assert result.returncode == 0, f"keepalive.mjs 单测失败：\n{result.stdout}\n{result.stderr}"
+        assert "0 failed" in result.stdout
+
 
 # ============================================================
 # workflow 内嵌 shell 的端到端回归测试
