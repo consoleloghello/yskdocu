@@ -297,6 +297,11 @@ const CSS = {
 - 手动验证：`npm run keepalive`，或在 SQL Editor 执行 `SELECT public.keepalive_ping('manual-test');`
 - 排查顺序：404 → 未执行 `keepalive.sql`；401/403 → anon key 已轮换（需同步 `js/supabase.js` 与 workflow）；5xx/000 → 项目可能已被暂停，去 Dashboard Resume
 
+> **两个已踩过的坑（都有测试锁死，别再犯）**
+> 1. **不能用只读 SELECT 保活。** `GET /rest/v1/profiles?select=id` 即使返回 200 也不重置计时器，现在已无任何只读降级路径。
+> 2. **判定成功不能写死紧凑 JSON。** PostgREST 的 jsonb 返回是 `{"ok": true}`（**冒号后有空格**），`grep '"ok":true'` 会永远失配 —— 表现为写入明明成功（HTTP 200、`ping_count` 递增）却报失败。必须用 `[[:space:]]*` 容忍空白，或用 `JSON.parse`（`keepalive.mjs` 用的是后者）。
+>    用 mock 自测时务必**照抄真实响应格式**，否则 mock 会替你掩盖 bug；`TestWorkflowShellAgainstRealisticResponses` 就是为此而写。
+
 `scripts/gen_changelog.mjs`、`scripts/compress_data.mjs` 与保活无关，不涉及。
 
 ## 关键约束
